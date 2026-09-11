@@ -25,7 +25,10 @@ class MockCollectionRef:
     def document(self, doc_id: str):
         return MockDocumentRef(self.store, self.path + [doc_id])
 
-    def order_by(self, field_name: str):
+    def order_by(self, field_name: str, direction=None):
+        return self
+
+    def limit(self, count: int):
         return self
 
     def stream(self):
@@ -38,6 +41,7 @@ class MockCollectionRef:
             if isinstance(doc_val, dict) and "_data" in doc_val:
                 mock_snap = MagicMock()
                 mock_snap.to_dict.return_value = doc_val["_data"]
+                mock_snap.reference = MockDocumentRef(self.store, self.path + [doc_id])
                 snapshots.append(mock_snap)
         return snapshots
 
@@ -60,6 +64,13 @@ class MockDocumentRef:
             doc_entry["_data"].update(data)
         else:
             doc_entry["_data"] = data.copy()
+
+    def delete(self):
+        target = self._get_target()
+        doc_id = self.path[-1]
+        if doc_id in target:
+            del target[doc_id]
+
 
     def update(self, data: dict):
         target = self._get_target()

@@ -4,12 +4,13 @@ from pathlib import Path
 from typing import Optional, Tuple
 from google.cloud import storage
 
+from src.auth_utils import get_gcp_credentials
 from src.config import settings
 from src.logger import logger
 
 
 class StorageManager:
-    """Manages GCS file downloads and pairing between .mp4 and _config.json."""
+    """Manages GCS file downloads, uploads, and pairing between .mp4 and _config.json."""
 
     def __init__(self, client: Optional[storage.Client] = None):
         """Initializes the StorageManager.
@@ -24,7 +25,8 @@ class StorageManager:
         """Lazily initializes and returns the storage client."""
         if self._client is None:
             logger.info(f"Initializing Storage Client (project={settings.gcp_project})")
-            self._client = storage.Client(project=settings.gcp_project)
+            creds = get_gcp_credentials()
+            self._client = storage.Client(project=settings.gcp_project, credentials=creds)
         return self._client
 
     @staticmethod
@@ -81,3 +83,49 @@ class StorageManager:
 
         raw_bytes = blob.download_as_bytes()
         return json.loads(raw_bytes.decode("utf-8"))
+
+    def upload_file(
+        self,
+        bucket_name: str,
+        object_name: str,
+        data: bytes,
+        content_type: Optional[str] = None,
+    ) -> str:
+        """Uploads bytes directly to a GCS object."""
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        blob.upload_from_string(data, content_type=content_type or "application/octet-stream")
+        logger.info(f"Uploaded {len(data)} bytes to gs://{bucket_name}/{object_name}")
+        return f"gs://{bucket_name}/{object_name}"
+
+    def upload_json(self, bucket_name: str, object_name: str, data: dict) -> str:
+        """Uploads a dictionary as a JSON file to GCS."""
+        raw_json = json.dumps(data, indent=2)
+        return self.upload_file(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=raw_json.encode("utf-8"),
+            content_type="application/json",
+        )
+
+    def get_blob(self, bucket_name: str, object_name: str) -> Optional[storage.Blob]:
+        """Returns the GCS Blob object if it exists."""
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        if blob.exists():
+            blob.reload()
+            return blob
+        return None
+
+    def read_blob_range(
+        self,
+        bucket_name: str,
+        object_name: str,
+        start: int = 0,
+        end: Optional[int] = None,
+    ) -> bytes:
+        """Reads a byte range from a GCS blob."""
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        return blob.download_as_bytes(start=start, end=end)
+

@@ -1,9 +1,15 @@
-"""FastAPI Cloud Run Service and CloudEvent Router."""
-import os
-from typing import Any, Dict
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+"""FastAPI Cloud Run Service, Web Interface, and CloudEvent Ingestion."""
+import json
+import re
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from src.catalog import get_catalog_summary, parse_config_payload, validate_target_metadata
 from src.config import settings
 from src.logger import logger
 from src.pipeline_orchestrator import PipelineOrchestrator
@@ -11,21 +17,46 @@ from src.pipeline_orchestrator import PipelineOrchestrator
 app = FastAPI(
     title="Jeff's VideoScan - AI Video Metadata Extraction Pipeline",
     version="1.0.0",
-    description="Event-driven Cloud Run service for 10s video chunking and Gemini 3.8 metadata extraction",
+    description="Production service for 10s video chunking, Gemini metadata extraction, and Web UI",
 )
 
 orchestrator = PipelineOrchestrator()
 
+STATIC_DIR = Path(__file__).parent / "static"
+INDEX_HTML_PATH = STATIC_DIR / "index.html"
+
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def load_index_html() -> str:
+    """Loads web interface HTML file."""
+    if INDEX_HTML_PATH.exists():
+        return INDEX_HTML_PATH.read_text(encoding="utf-8")
+    return "<h1>Jeff's VideoScan</h1><p>UI loading error: index.html not found.</p>"
+
 
 @app.get("/")
-async def root():
-    """Root info endpoint."""
+async def root(request: Request):
+    """Root endpoint: serves Web UI if HTML is requested, or JSON status."""
+    accept = request.headers.get("accept", "").lower()
+    if "text/html" in accept:
+        return HTMLResponse(content=load_index_html())
     return {
         "service": "jeffsvideoscan",
         "status": "ready",
         "model": settings.gemini_model,
         "chunk_duration": settings.chunk_duration_seconds,
+        "gcp_project": settings.gcp_project,
+        "gcs_bucket": settings.gcs_bucket,
     }
+
+
+
+@app.get("/ui", response_class=HTMLResponse)
+async def web_ui():
+    """Direct route for Web Interface."""
+    return HTMLResponse(content=load_index_html())
 
 
 @app.get("/healthz")
@@ -33,6 +64,255 @@ async def root():
 async def health_check():
     """Container health and liveness check."""
     return {"status": "healthy"}
+
+
+@app.get("/api/info")
+async def get_service_info():
+    """Returns deployment configuration and runtime parameters."""
+    return {
+        "service": "jeffsvideoscan",
+        "status": "ready",
+        "gcp_project": settings.gcp_project,
+        "gcp_region": settings.gcp_region,
+        "gcs_bucket": settings.gcs_bucket,
+        "gemini_model": settings.gemini_model,
+        "chunk_duration_seconds": settings.chunk_duration_seconds,
+        "max_concurrent_chunks": settings.max_concurrent_chunks,
+    }
+
+
+@app.get("/api/catalog")
+async def get_catalog():
+    """Returns metadata extraction catalog definitions and categories."""
+    return get_catalog_summary()
+
+
+@app.get("/api/videos")
+async def list_videos(limit: int = 100):
+    """Lists indexed videos from Cloud Firestore."""
+    videos = orchestrator.firestore_repo.list_videos(limit=limit)
+    for v in videos:
+        bucket = v.get("gcs_bucket") or settings.gcs_bucket
+        path = v.get("gcs_path") or f"{v.get('video_id')}.mp4"
+        v["gcs_uri"] = f"gs://{bucket}/{path}"
+    return {"videos": videos}
+
+
+@app.get("/api/videos/{video_id}")
+async def get_video_detail(video_id: str):
+    """Retrieves full Firestore video document and its extracted chunk documents."""
+    record = orchestrator.firestore_repo.get_video_record(video_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video '{video_id}' not found in Firestore collection 'videos'.",
+        )
+
+    chunks = orchestrator.firestore_repo.get_video_chunks(video_id)
+    bucket = record.get("gcs_bucket", settings.gcs_bucket)
+    path = record.get("gcs_path", f"{video_id}.mp4")
+    config_path = record.get("config_path", f"{video_id}_config.json")
+
+    return {
+        "video": record,
+        "chunks": chunks,
+        "gcs_uri": f"gs://{bucket}/{path}",
+        "config_gcs_uri": f"gs://{bucket}/{config_path}",
+    }
+
+
+@app.get("/api/videos/{video_id}/video")
+async def stream_video(video_id: str, request: Request):
+    """Streams video file from Google Cloud Storage with HTTP 206 Partial Content support."""
+    record = orchestrator.firestore_repo.get_video_record(video_id)
+    bucket_name = record.get("gcs_bucket", settings.gcs_bucket) if record else settings.gcs_bucket
+    object_name = record.get("gcs_path", f"{video_id}.mp4") if record else f"{video_id}.mp4"
+
+    blob = orchestrator.storage_manager.get_blob(bucket_name, object_name)
+    if not blob:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video file not found at gs://{bucket_name}/{object_name}",
+        )
+
+    file_size = blob.size
+    range_header = request.headers.get("range")
+
+    if range_header and file_size:
+        # Parse standard Range: bytes=start-end
+        try:
+            byte_range = range_header.replace("bytes=", "").split("-")
+            start = int(byte_range[0]) if byte_range[0] else 0
+            end = int(byte_range[1]) if len(byte_range) > 1 and byte_range[1] else file_size - 1
+            end = min(end, file_size - 1)
+        except Exception:
+            start = 0
+            end = file_size - 1
+
+        data = blob.download_as_bytes(start=start, end=end)
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(data)),
+            "Content-Type": "video/mp4",
+        }
+        return Response(content=data, status_code=status.HTTP_206_PARTIAL_CONTENT, headers=headers)
+    else:
+        data = blob.download_as_bytes()
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size or len(data)),
+            "Content-Type": "video/mp4",
+        }
+        return Response(content=data, status_code=status.HTTP_200_OK, headers=headers)
+
+
+@app.post("/api/upload")
+async def upload_video_and_config(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(...),
+    config_file: Optional[UploadFile] = File(None),
+    config_json: Optional[str] = Form(None),
+    video_id: Optional[str] = Form(None),
+    run_pipeline: bool = Form(True),
+):
+    """Uploads a video and configuration file to GCS and initiates processing."""
+    # 1. Determine sanitized video_id
+    if video_id and video_id.strip():
+        raw_id = video_id.strip()
+    else:
+        raw_id = Path(video.filename or "video").stem
+
+    clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", raw_id).strip("_").lower()
+    if not clean_id:
+        clean_id = f"video_{int(time.time())}"
+
+    # 2. Determine target configuration payload
+    config_dict: Dict[str, Any] = {}
+    if config_file and config_file.filename:
+        try:
+            config_bytes = await config_file.read()
+            config_dict = json.loads(config_bytes.decode("utf-8"))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to parse uploaded config JSON file: {e}",
+            )
+    elif config_json:
+        try:
+            config_dict = json.loads(config_json)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to parse config_json string: {e}",
+            )
+    else:
+        # Default target metadata
+        config_dict = {
+            "target_metadata": [
+                "chunk_summary",
+                "scene_description",
+                "detected_objects",
+                "overall_sentiment",
+            ]
+        }
+
+    # Validate configuration against metadata catalog
+    try:
+        validated_metadata = parse_config_payload(config_dict)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Configuration validation error: {e}",
+        )
+
+    # 3. Read video contents
+    video_bytes = await video.read()
+    if not video_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded video file is empty.",
+        )
+
+    # 4. Upload config and video to Google Cloud Storage
+    bucket_name = settings.gcs_bucket
+    video_object = f"{clean_id}.mp4"
+    config_object = f"{clean_id}_config.json"
+
+    # Upload config first
+    logger.info(f"Uploading config to gs://{bucket_name}/{config_object}")
+    orchestrator.storage_manager.upload_json(
+        bucket_name=bucket_name,
+        object_name=config_object,
+        data={"target_metadata": validated_metadata},
+    )
+
+    # Upload video
+    logger.info(f"Uploading video ({len(video_bytes)} bytes) to gs://{bucket_name}/{video_object}")
+    orchestrator.storage_manager.upload_file(
+        bucket_name=bucket_name,
+        object_name=video_object,
+        data=video_bytes,
+        content_type=video.content_type or "video/mp4",
+    )
+
+    # 5. Initiate pipeline processing if requested
+    if run_pipeline:
+        logger.info(f"Adding background pipeline execution for video {clean_id}")
+        background_tasks.add_task(
+            orchestrator.execute_video_pipeline,
+            bucket_name=bucket_name,
+            video_id=clean_id,
+            video_object=video_object,
+            config_object=config_object,
+            force=True,
+        )
+
+    return {
+        "status": "PROCESSING",
+        "video_id": clean_id,
+        "filename": video_object,
+        "gcs_bucket": bucket_name,
+        "gcs_video_path": video_object,
+        "gcs_config_path": config_object,
+        "gcs_uri": f"gs://{bucket_name}/{video_object}",
+        "target_metadata": validated_metadata,
+        "message": f"Successfully uploaded {video_object} and {config_object}. Pipeline execution started.",
+    }
+
+
+@app.post("/api/videos/{video_id}/process")
+async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks):
+    """Triggers or forces re-processing of a video currently in GCS."""
+    record = orchestrator.firestore_repo.get_video_record(video_id)
+    bucket = record.get("gcs_bucket", settings.gcs_bucket) if record else settings.gcs_bucket
+    video_object = record.get("gcs_path", f"{video_id}.mp4") if record else f"{video_id}.mp4"
+    config_object = record.get("config_path", f"{video_id}_config.json") if record else f"{video_id}_config.json"
+
+    if not orchestrator.storage_manager.check_blob_exists(bucket, video_object):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video file gs://{bucket}/{video_object} does not exist in GCS.",
+        )
+
+    background_tasks.add_task(
+        orchestrator.execute_video_pipeline,
+        bucket_name=bucket,
+        video_id=video_id,
+        video_object=video_object,
+        config_object=config_object,
+        force=True,
+    )
+    return {"status": "TRIGGERED", "video_id": video_id}
+
+
+@app.delete("/api/videos/{video_id}")
+async def delete_video(video_id: str):
+    """Deletes video document and chunks from Firestore."""
+    success = orchestrator.firestore_repo.delete_video_record(video_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete video from Firestore.")
+    return {"status": "DELETED", "video_id": video_id}
 
 
 def extract_storage_event_data(request_body: Dict[str, Any], headers: Dict[str, str]) -> tuple[str, str]:
@@ -54,7 +334,6 @@ def extract_storage_event_data(request_body: Dict[str, Any], headers: Dict[str, 
     # Check CloudEvent headers if present
     ce_subject = headers.get("ce-subject")
     if ce_subject and "objects/" in ce_subject:
-        # Format: objects/path/to/file.mp4
         name = ce_subject.split("objects/", 1)[-1]
         bucket = request_body.get("bucket") or settings.gcs_bucket
         if bucket and name:

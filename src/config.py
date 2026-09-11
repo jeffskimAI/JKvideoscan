@@ -4,6 +4,24 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _detect_gcp_project() -> str:
+    proj = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    if proj:
+        return proj
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["gcloud", "config", "get-value", "project"],
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        ).decode().strip()
+        if out and out != "(unset)":
+            return out
+    except Exception:
+        pass
+    return "jeffskim999"
+
+
 class Settings(BaseSettings):
     """Pipeline runtime configuration."""
 
@@ -14,9 +32,7 @@ class Settings(BaseSettings):
     )
 
     # Google Cloud Project Configuration
-    gcp_project: str = Field(
-        default_factory=lambda: os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("GCP_PROJECT", "jeffsvideoscan-prod"))
-    )
+    gcp_project: str = Field(default_factory=_detect_gcp_project)
     gcp_region: str = Field(default="us-central1")
 
     # Cloud Storage & Firestore

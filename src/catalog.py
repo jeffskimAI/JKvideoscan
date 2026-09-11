@@ -215,3 +215,25 @@ def parse_config_payload(payload: dict) -> List[str]:
         raise CatalogValidationError("'target_metadata' must be an array of strings.")
 
     return validate_target_metadata(target_metadata)
+
+
+def get_catalog_summary() -> Dict[str, Any]:
+    """Returns the catalog grouped by category with JSON-serializable types."""
+    categories: Dict[str, List[Dict[str, Any]]] = {}
+    for field in METADATA_CATALOG.values():
+        if field.category not in categories:
+            categories[field.category] = []
+        type_str = getattr(field.python_type, "__name__", str(field.python_type))
+        categories[field.category].append({
+            "key": field.key,
+            "category": field.category,
+            "type": type_str,
+            "description": field.description,
+            "example": field.example,
+        })
+    return {
+        "categories": categories,
+        "all_keys": sorted(list(SUPPORTED_METADATA_KEYS)),
+        "total_fields": len(METADATA_CATALOG),
+    }
+

@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from google import genai
 from google.genai import types
 
+from src.auth_utils import get_gcp_credentials
 from src.catalog import validate_target_metadata
 from src.config import settings
 from src.logger import logger
@@ -43,10 +44,12 @@ class GeminiExtractor:
                 f"Initializing Vertex AI GenAI Client (project={settings.gcp_project}, "
                 f"region={settings.gcp_region})"
             )
+            creds = get_gcp_credentials()
             self._client = genai.Client(
                 vertexai=True,
                 project=settings.gcp_project,
                 location=settings.gcp_region,
+                credentials=creds,
             )
         return self._client
 

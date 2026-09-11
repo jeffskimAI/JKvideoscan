@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from google.cloud import firestore
 
+from src.auth_utils import get_gcp_credentials
 from src.config import settings
 from src.logger import logger
 from src.video_segmenter import VideoChunk
@@ -34,9 +35,11 @@ class FirestoreRepository:
                 f"Initializing Firestore Client (project={settings.gcp_project}, "
                 f"database={settings.firestore_database})"
             )
+            creds = get_gcp_credentials()
             self._client = firestore.Client(
                 project=settings.gcp_project,
                 database=settings.firestore_database,
+                credentials=creds,
             )
         return self._client
 
@@ -169,3 +172,35 @@ class FirestoreRepository:
         )
         docs = chunks_ref.order_by("chunk_index").stream()
         return [doc.to_dict() for doc in docs]
+
+    def list_videos(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Retrieves all video documents from Firestore, sorted by created_at descending."""
+        try:
+            col_ref = self.client.collection(self.collection_name)
+            try:
+                docs = col_ref.order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit).stream()
+                results = [doc.to_dict() for doc in docs if doc.to_dict()]
+            except Exception:
+                docs = col_ref.limit(limit).stream()
+                results = [doc.to_dict() for doc in docs if doc.to_dict()]
+                results.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+            return results
+        except Exception as e:
+            logger.error(f"Failed to list videos from Firestore: {e}")
+            return []
+
+    def delete_video_record(self, video_id: str) -> bool:
+        """Deletes a video record and its chunks subcollection from Firestore."""
+        try:
+            doc_ref = self.client.collection(self.collection_name).document(video_id)
+            # Delete chunks subcollection
+            chunks_ref = doc_ref.collection("chunks")
+            for chunk_doc in chunks_ref.stream():
+                chunk_doc.reference.delete()
+            doc_ref.delete()
+            logger.info(f"Deleted Firestore record for video_id={video_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete video_id={video_id} from Firestore: {e}")
+            return False
+

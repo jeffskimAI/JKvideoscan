@@ -71,10 +71,19 @@ class PipelineOrchestrator:
         video_id: str,
         video_object: str,
         config_object: str,
+        force: bool = False,
     ) -> Dict[str, Any]:
         """Executes full extraction pipeline for a paired video and config."""
+        existing = self.firestore_repo.get_video_record(video_id)
+        if existing and not force:
+            status = existing.get("status")
+            if status == "PROCESSING":
+                logger.info(f"Video {video_id} is already PROCESSING. Skipping duplicate run.")
+                return {"status": "PROCESSING", "video_id": video_id, "message": "Already processing"}
+
         work_dir = self.temp_base_dir / video_id
         work_dir.mkdir(parents=True, exist_ok=True)
+
 
         try:
             # 1. Download and parse configuration
