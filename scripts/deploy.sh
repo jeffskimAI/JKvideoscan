@@ -27,7 +27,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --cpu 2 \
   --timeout 900 \
   --concurrency 4 \
-  --set-env-vars "GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-2.5-flash,GCS_BUCKET=jeffsvideoscan-ingest" \
+  --set-env-vars "GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-2.5-flash,GCS_BUCKET=jeffsvideoscan-ingest,APP_PASSWORD=demopepper999!" \
   --allow-unauthenticated
 
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" --platform managed --region "${REGION}" --format 'value(status.url)')

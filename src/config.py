@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     max_concurrent_chunks: int = Field(default=4, description="Maximum parallel Gemini inferences")
     temp_dir: str = Field(default="/tmp/videoprocessing")
 
+    # Authentication
+    app_password: str = Field(default="demopepper999!", description="Password required to access Web App")
+    auth_secret_key: str = Field(default="jeffsvideoscan-secret-salt-2026")
+
     # Server Configuration
     port: int = Field(default=8080)
     log_level: str = Field(default="INFO")

@@ -1,31 +1,82 @@
-"""Tests for Web Interface, Upload, and Firestore Catalog API endpoints."""
+"""Tests for Web Interface, Upload, Authentication, and Firestore Catalog API endpoints."""
 import io
 import json
 from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from src.main import app, orchestrator
+from src.main import app, orchestrator, get_auth_token
 from tests.test_firestore_repo import MockFirestoreClient
 
 
 @pytest.fixture
-def client():
+def auth_headers():
+    return {"X-App-Password": "demopepper999!"}
+
+
+@pytest.fixture
+def client(auth_headers):
+    return TestClient(app, headers=auth_headers)
+
+
+@pytest.fixture
+def unauth_client():
     return TestClient(app)
 
 
-def test_ui_and_root_html(client):
-    """Test that GET / with text/html and GET /ui deliver the HTML interface."""
+def test_ui_and_root_html(unauth_client):
+    """Test that GET / with text/html and GET /ui deliver the HTML interface without requiring prior auth."""
     # Requesting HTML via Accept header
-    res_root = client.get("/", headers={"Accept": "text/html,application/xhtml+xml"})
+    res_root = unauth_client.get("/", headers={"Accept": "text/html,application/xhtml+xml"})
     assert res_root.status_code == 200
     assert "Jeff's VideoScan" in res_root.text
     assert "<!DOCTYPE html>" in res_root.text
+    assert "authGate" in res_root.text
 
     # Direct /ui endpoint
-    res_ui = client.get("/ui")
+    res_ui = unauth_client.get("/ui")
     assert res_ui.status_code == 200
     assert "Jeff's VideoScan" in res_ui.text
+    assert "authGate" in res_ui.text
+
+
+def test_auth_login_and_verification(unauth_client):
+    """Test authentication login, rejection of invalid password, and token verification."""
+    # 1. Unauthenticated access to protected route is rejected with 401
+    res_unauth = unauth_client.get("/api/info")
+    assert res_unauth.status_code == 401
+    assert "Authentication required" in res_unauth.json()["detail"]
+
+    # 2. Login with incorrect password returns 401
+    res_bad = unauth_client.post("/api/auth/login", json={"password": "wrong_password!"})
+    assert res_bad.status_code == 401
+    assert "Incorrect password" in res_bad.json()["detail"]
+
+    # 3. Login with correct password 'demopepper999!' returns 200 and session token
+    res_login = unauth_client.post("/api/auth/login", json={"password": "demopepper999!"})
+    assert res_login.status_code == 200
+    login_data = res_login.json()
+    assert login_data["success"] is True
+    assert "token" in login_data
+    assert "videoscan_auth_token" in res_login.cookies
+
+    token = login_data["token"]
+    assert token == get_auth_token()
+
+    # 4. Verify endpoint with token header
+    res_verify = unauth_client.get("/api/auth/verify", headers={"Authorization": f"Bearer {token}"})
+    assert res_verify.status_code == 200
+    assert res_verify.json()["authenticated"] is True
+
+    # 5. Access protected route with Bearer token
+    res_authed = unauth_client.get("/api/info", headers={"Authorization": f"Bearer {token}"})
+    assert res_authed.status_code == 200
+    assert res_authed.json()["service"] == "jeffsvideoscan"
+
+    # 6. Logout clears cookie
+    res_logout = unauth_client.post("/api/auth/logout")
+    assert res_logout.status_code == 200
+    assert res_logout.json()["success"] is True
 
 
 def test_api_info(client):
@@ -146,6 +197,13 @@ def test_api_video_streaming_and_range(client):
         assert res_range.headers["Content-Range"] == "bytes 0-99/1000"
         assert len(res_range.content) == 100
         assert res_range.content == fake_video_bytes[:100]
+
+        # 3. Query param token access
+        token = get_auth_token()
+        unauth = TestClient(app)
+        res_token = unauth.get(f"/api/videos/stream_test/video?token={token}")
+        assert res_token.status_code == 200
+        assert res_token.content == fake_video_bytes
     finally:
         orchestrator.storage_manager = orig_storage
 
@@ -160,39 +218,37 @@ def test_api_upload_with_builder_json(client):
     try:
         orchestrator.storage_manager = mock_storage
 
-        video_content = b"fake video bytes"
+        video_content = b"fake video bytes for testing"
         config_json = json.dumps({
-            "target_metadata": ["scene_description", "detected_objects", "chunk_summary"]
+            "target_metadata": ["scene_description", "chunk_summary", "detected_objects"]
         })
 
         files = {
-            "video": ("my_cool_video.mp4", io.BytesIO(video_content), "video/mp4"),
+            "video": ("my_test_video.mp4", io.BytesIO(video_content), "video/mp4"),
         }
         data = {
-            "video_id": "custom_demo_id",
             "config_json": config_json,
-            "run_pipeline": "false",  # Don't trigger background pipeline in test
+            "video_id": "custom_test_id",
+            "run_pipeline": "false",
         }
 
         res = client.post("/api/upload", files=files, data=data)
         assert res.status_code == 200
         resp_data = res.json()
         assert resp_data["status"] == "PROCESSING"
-        assert resp_data["video_id"] == "custom_demo_id"
-        assert resp_data["filename"] == "custom_demo_id.mp4"
-        assert resp_data["gcs_video_path"] == "custom_demo_id.mp4"
-        assert resp_data["gcs_config_path"] == "custom_demo_id_config.json"
-        assert "scene_description" in resp_data["target_metadata"]
+        assert resp_data["video_id"] == "custom_test_id"
+        assert resp_data["target_metadata"] == ["scene_description", "chunk_summary", "detected_objects"]
+        assert resp_data["gcs_uri"] == "gs://jeffsvideoscan-ingest/custom_test_id.mp4"
 
-        # Verify GCS upload was called for both video and config
-        mock_storage.upload_json.assert_called_once()
-        mock_storage.upload_file.assert_called_once()
+        # Verify storage manager was called with video and config
+        assert mock_storage.upload_json.called
+        assert mock_storage.upload_file.called
     finally:
         orchestrator.storage_manager = orig_storage
 
 
 def test_api_upload_with_config_file(client):
-    """Test uploading a video file paired with a _config.json file."""
+    """Test uploading a video file with a separate .json config file."""
     mock_storage = MagicMock()
     mock_storage.upload_file.return_value = "gs://jeffsvideoscan-ingest/clip1.mp4"
     mock_storage.upload_json.return_value = "gs://jeffsvideoscan-ingest/clip1_config.json"

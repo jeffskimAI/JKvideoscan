@@ -1,13 +1,16 @@
 """FastAPI Cloud Run Service, Web Interface, and CloudEvent Ingestion."""
+import hashlib
+import hmac
 import json
 import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from src.catalog import get_catalog_summary, parse_config_payload, validate_target_metadata
 from src.config import settings
@@ -36,6 +39,111 @@ def load_index_html() -> str:
     return "<h1>Jeff's VideoScan</h1><p>UI loading error: index.html not found.</p>"
 
 
+# ---------------------------------------------------------------------------
+# Authentication Utilities & Dependencies
+# ---------------------------------------------------------------------------
+class LoginPayload(BaseModel):
+    password: str
+
+
+def get_auth_token() -> str:
+    """Computes deterministic session token based on current app_password and secret key."""
+    return hashlib.sha256(f"{settings.app_password}:{settings.auth_secret_key}".encode("utf-8")).hexdigest()
+
+
+def is_authenticated(request: Request) -> bool:
+    """Checks whether the request presents a valid authorization credential."""
+    expected_token = get_auth_token()
+
+    # 1. Bearer Token in Authorization header
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if hmac.compare_digest(token, expected_token):
+            return True
+
+    # 2. Cookie 'videoscan_auth_token'
+    cookie_token = request.cookies.get("videoscan_auth_token")
+    if cookie_token and hmac.compare_digest(cookie_token, expected_token):
+        return True
+
+    # 3. Direct header 'X-App-Password'
+    pwd_header = request.headers.get("x-app-password")
+    if pwd_header and hmac.compare_digest(pwd_header, settings.app_password):
+        return True
+
+    # 4. Query parameter 'token' (vital for HTML5 <video> elements)
+    query_token = request.query_params.get("token")
+    if query_token and hmac.compare_digest(query_token, expected_token):
+        return True
+
+    # 5. Query parameter 'password'
+    query_pwd = request.query_params.get("password")
+    if query_pwd and hmac.compare_digest(query_pwd, settings.app_password):
+        return True
+
+    return False
+
+
+def require_auth(request: Request):
+    """Enforces authentication dependency for sensitive API routes."""
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please enter the app password (demopepper999!).",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Authentication Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/api/auth/login")
+async def auth_login(payload: LoginPayload, response: Response):
+    """Validates the application password and creates an authenticated session."""
+    if not hmac.compare_digest(payload.password, settings.app_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password. Access denied.",
+        )
+
+    token = get_auth_token()
+    # Set HTTP-only session cookie valid for 30 days
+    response.set_cookie(
+        key="videoscan_auth_token",
+        value=token,
+        max_age=86400 * 30,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "success": True,
+        "token": token,
+        "message": "Authenticated successfully",
+    }
+
+
+@app.get("/api/auth/verify")
+async def auth_verify(request: Request):
+    """Checks whether the client session is currently authenticated."""
+    if is_authenticated(request):
+        return {"authenticated": True, "token": get_auth_token()}
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"authenticated": False, "detail": "Not authenticated"},
+    )
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(response: Response):
+    """Clears the authentication session cookie."""
+    response.delete_cookie(key="videoscan_auth_token")
+    return {"success": True, "message": "Logged out successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Public Web & Health Check Routes
+# ---------------------------------------------------------------------------
 @app.get("/")
 async def root(request: Request):
     """Root endpoint: serves Web UI if HTML is requested, or JSON status."""
@@ -52,7 +160,6 @@ async def root(request: Request):
     }
 
 
-
 @app.get("/ui", response_class=HTMLResponse)
 async def web_ui():
     """Direct route for Web Interface."""
@@ -66,7 +173,10 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.get("/api/info")
+# ---------------------------------------------------------------------------
+# Protected API Routes (Protected with require_auth)
+# ---------------------------------------------------------------------------
+@app.get("/api/info", dependencies=[Depends(require_auth)])
 async def get_service_info():
     """Returns deployment configuration and runtime parameters."""
     return {
@@ -81,13 +191,13 @@ async def get_service_info():
     }
 
 
-@app.get("/api/catalog")
+@app.get("/api/catalog", dependencies=[Depends(require_auth)])
 async def get_catalog():
     """Returns metadata extraction catalog definitions and categories."""
     return get_catalog_summary()
 
 
-@app.get("/api/videos")
+@app.get("/api/videos", dependencies=[Depends(require_auth)])
 async def list_videos(limit: int = 100):
     """Lists indexed videos from Cloud Firestore."""
     videos = orchestrator.firestore_repo.list_videos(limit=limit)
@@ -98,7 +208,7 @@ async def list_videos(limit: int = 100):
     return {"videos": videos}
 
 
-@app.get("/api/videos/{video_id}")
+@app.get("/api/videos/{video_id}", dependencies=[Depends(require_auth)])
 async def get_video_detail(video_id: str):
     """Retrieves full Firestore video document and its extracted chunk documents."""
     record = orchestrator.firestore_repo.get_video_record(video_id)
@@ -121,7 +231,7 @@ async def get_video_detail(video_id: str):
     }
 
 
-@app.get("/api/videos/{video_id}/video")
+@app.get("/api/videos/{video_id}/video", dependencies=[Depends(require_auth)])
 async def stream_video(video_id: str, request: Request):
     """Streams video file from Google Cloud Storage with HTTP 206 Partial Content support."""
     record = orchestrator.firestore_repo.get_video_record(video_id)
@@ -167,7 +277,7 @@ async def stream_video(video_id: str, request: Request):
         return Response(content=data, status_code=status.HTTP_200_OK, headers=headers)
 
 
-@app.post("/api/upload")
+@app.post("/api/upload", dependencies=[Depends(require_auth)])
 async def upload_video_and_config(
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
@@ -281,7 +391,7 @@ async def upload_video_and_config(
     }
 
 
-@app.post("/api/videos/{video_id}/process")
+@app.post("/api/videos/{video_id}/process", dependencies=[Depends(require_auth)])
 async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks):
     """Triggers or forces re-processing of a video currently in GCS."""
     record = orchestrator.firestore_repo.get_video_record(video_id)
@@ -306,7 +416,7 @@ async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks)
     return {"status": "TRIGGERED", "video_id": video_id}
 
 
-@app.delete("/api/videos/{video_id}")
+@app.delete("/api/videos/{video_id}", dependencies=[Depends(require_auth)])
 async def delete_video(video_id: str):
     """Deletes video document and chunks from Firestore."""
     success = orchestrator.firestore_repo.delete_video_record(video_id)
@@ -315,6 +425,9 @@ async def delete_video(video_id: str):
     return {"status": "DELETED", "video_id": video_id}
 
 
+# ---------------------------------------------------------------------------
+# CloudEvent Ingestion (Eventarc Storage Webhooks)
+# ---------------------------------------------------------------------------
 def extract_storage_event_data(request_body: Dict[str, Any], headers: Dict[str, str]) -> tuple[str, str]:
     """Extracts bucket and object name from binary or structured CloudEvent payloads."""
     # Structured mode: {"data": {"bucket": "...", "name": "..."}}

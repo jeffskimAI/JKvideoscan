@@ -45,8 +45,101 @@
       50% { opacity: .4; }
     }
   </style>
-</head>
-<body class="h-full flex flex-col font-sans antialiased overflow-x-hidden">
+<body class="h-full bg-slate-950 text-slate-100 font-sans antialiased overflow-x-hidden">
+
+  <!-- ========================================== -->
+  <!-- SECURITY & ACCESS AUTHENTICATION GATE      -->
+  <!-- ========================================== -->
+  <div id="authGate" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-4">
+    <div class="relative w-full max-w-md">
+      <!-- Ambient Glow Behind Modal -->
+      <div class="absolute -inset-1 rounded-3xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-20 blur-xl"></div>
+
+      <div class="relative rounded-2xl bg-slate-900/95 border border-slate-800 p-8 shadow-2xl backdrop-blur-md">
+        <!-- Shield & Lock Badge -->
+        <div class="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-0.5 shadow-xl shadow-indigo-500/25 mb-6 flex items-center justify-center">
+          <div class="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
+            <svg class="w-8 h-8 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+        </div>
+
+        <div class="text-center mb-6">
+          <h2 class="text-2xl font-bold tracking-tight text-white mb-2">Jeff's VideoScan Access</h2>
+          <p class="text-sm text-slate-400">Enter the system password to access the AI video intelligence portal and Firestore metadata library.</p>
+        </div>
+
+        <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+          <!-- Error banner -->
+          <div id="authErrorBanner" class="hidden p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center space-x-2">
+            <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span id="authErrorText">Incorrect password. Access denied.</span>
+          </div>
+
+          <!-- Password input group -->
+          <div>
+            <label for="authPasswordInput" class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              Access Password
+            </label>
+            <div class="relative rounded-xl shadow-sm">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 2l-2 2m-1.5 1.5L16 7m-4 4l-4 4-4-4 4-4 4 4z"></path>
+                  <circle cx="15.5" cy="8.5" r="2.5"></circle>
+                </svg>
+              </div>
+              <input 
+                type="password" 
+                id="authPasswordInput" 
+                required 
+                autocomplete="current-password"
+                placeholder="Enter password..." 
+                class="w-full pl-11 pr-11 py-3 bg-slate-950/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-mono"
+              >
+              <button 
+                type="button" 
+                onclick="toggleAuthPasswordVisibility()" 
+                class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition-colors"
+                title="Toggle password visibility"
+              >
+                <svg id="eyeIconOpen" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg id="eyeIconClosed" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            id="authSubmitBtn"
+            class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-sm shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 transition-all duration-200 flex items-center justify-center space-x-2"
+          >
+            <span>Unlock Portal</span>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MAIN APP WRAPPER                           -->
+  <!-- ========================================== -->
+  <div id="appRoot" class="hidden min-h-screen flex flex-col font-sans antialiased">
 
   <!-- TOP NAVIGATION HEADER -->
   <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
@@ -125,6 +218,17 @@
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
           <span class="hidden sm:inline">Catalog</span>
+        </button>
+
+        <div class="h-4 w-px bg-slate-800 mx-1"></div>
+
+        <!-- Lock Button -->
+        <button id="navLockBtn" onclick="handleLogout()" title="Lock Web App" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 border border-slate-700/60 hover:border-rose-800/60 flex items-center space-x-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <span class="hidden sm:inline">Lock</span>
         </button>
       </nav>
 
@@ -644,6 +748,9 @@
     </div>
   </footer>
 
+  </div>
+  <!-- /MAIN APP WRAPPER (#appRoot) -->
+
   <!-- ==================================================== -->
   <!-- FRONTEND JAVASCRIPT APPLICATION LOGIC               -->
   <!-- ==================================================== -->
@@ -663,8 +770,142 @@
     ]);
     let pollInterval = null;
 
-    // Initialize application
-    document.addEventListener('DOMContentLoaded', async () => {
+    // ==========================================
+    // AUTHENTICATION & ACCESS CONTROL
+    // ==========================================
+    function getAuthToken() {
+      return localStorage.getItem('videoscan_token') || '';
+    }
+
+    function setAuthToken(token) {
+      if (token) {
+        localStorage.setItem('videoscan_token', token);
+      } else {
+        localStorage.removeItem('videoscan_token');
+      }
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = getAuthToken();
+      const headers = options.headers ? new Headers(options.headers) : new Headers();
+      if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      const res = await fetch(url, { ...options, credentials: 'include', headers });
+      if (res.status === 401) {
+        setAuthToken(null);
+        showAuthGate('Access denied or session expired. Please enter password.');
+        throw new Error('Authentication required');
+      }
+      return res;
+    }
+
+    function showAuthGate(errorMessage = null) {
+      const gate = document.getElementById('authGate');
+      const appRoot = document.getElementById('appRoot');
+      const errorBanner = document.getElementById('authErrorBanner');
+      const errorText = document.getElementById('authErrorText');
+      const pwdInput = document.getElementById('authPasswordInput');
+
+      if (errorMessage) {
+        errorText.textContent = errorMessage;
+        errorBanner.classList.remove('hidden');
+      } else {
+        errorBanner.classList.add('hidden');
+      }
+
+      gate.classList.remove('hidden');
+      appRoot.classList.add('hidden');
+      pwdInput.value = '';
+      setTimeout(() => pwdInput.focus(), 150);
+    }
+
+    function hideAuthGate() {
+      const gate = document.getElementById('authGate');
+      const appRoot = document.getElementById('appRoot');
+      gate.classList.add('hidden');
+      appRoot.classList.remove('hidden');
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const pwdInput = document.getElementById('authPasswordInput');
+      const password = pwdInput.value;
+      const submitBtn = document.getElementById('authSubmitBtn');
+      const errorBanner = document.getElementById('authErrorBanner');
+      const errorText = document.getElementById('authErrorText');
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span>Verifying...</span>
+      `;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ password }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setAuthToken(data.token);
+          hideAuthGate();
+          await initApp();
+        } else {
+          const err = await res.json();
+          errorText.textContent = err.detail || 'Incorrect password. Access denied.';
+          errorBanner.classList.remove('hidden');
+          pwdInput.classList.add('border-rose-500', 'ring-2', 'ring-rose-500/30');
+          setTimeout(() => pwdInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-500/30'), 1500);
+        }
+      } catch (err) {
+        errorText.textContent = 'Connection error: ' + err.message;
+        errorBanner.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <span>Unlock Portal</span>
+          <svg class="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        `;
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch (e) {}
+      setAuthToken(null);
+      showAuthGate();
+    }
+
+    function toggleAuthPasswordVisibility() {
+      const pwdInput = document.getElementById('authPasswordInput');
+      const eyeOpen = document.getElementById('eyeIconOpen');
+      const eyeClosed = document.getElementById('eyeIconClosed');
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        eyeOpen.classList.add('hidden');
+        eyeClosed.classList.remove('hidden');
+      } else {
+        pwdInput.type = 'password';
+        eyeOpen.classList.remove('hidden');
+        eyeClosed.classList.add('hidden');
+      }
+    }
+
+    let isAppInitialized = false;
+    async function initApp() {
+      if (isAppInitialized) return;
+      isAppInitialized = true;
       await fetchAppInfo();
       await fetchCatalog();
       await fetchVideosList();
@@ -676,6 +917,25 @@
       if (['upload', 'library', 'inspector', 'catalog'].includes(hash)) {
         switchTab(hash);
       }
+    }
+
+    // Initialize application or gate
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const res = await fetch('/api/auth/verify', {
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include'
+          });
+          if (res.ok) {
+            hideAuthGate();
+            await initApp();
+            return;
+          }
+        } catch (e) {}
+      }
+      showAuthGate();
     });
 
     // Switch active view tab
@@ -702,7 +962,7 @@
     // Fetch backend info
     async function fetchAppInfo() {
       try {
-        const res = await fetch('/api/info');
+        const res = await apiFetch('/api/info');
         if (res.ok) {
           appInfo = await res.json();
           document.getElementById('headerGcpProject').textContent = appInfo.gcp_project || 'jeffskim999';
@@ -716,7 +976,7 @@
     // Fetch catalog keys
     async function fetchCatalog() {
       try {
-        const res = await fetch('/api/catalog');
+        const res = await apiFetch('/api/catalog');
         if (res.ok) {
           catalogData = await res.json();
           renderCatalogGuide();
@@ -1020,6 +1280,11 @@
       // Use XMLHttpRequest for precise upload progress tracking
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/upload', true);
+      const token = getAuthToken();
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.withCredentials = true;
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -1043,6 +1308,9 @@
             progressBar.style.width = '0%';
             openVideoInspector(resp.video_id);
           }, 1200);
+        } else if (xhr.status === 401) {
+          setAuthToken(null);
+          showAuthGate('Session expired. Please re-enter the password.');
         } else {
           let errDetail = xhr.statusText;
           try {
@@ -1068,7 +1336,7 @@
     // Fetch Videos List from Firestore
     async function fetchVideosList(userTriggered = false) {
       try {
-        const res = await fetch('/api/videos');
+        const res = await apiFetch('/api/videos');
         if (res.ok) {
           const data = await res.json();
           renderVideosGrid(data.videos || []);
@@ -1196,7 +1464,7 @@
     // Load detailed video record + chunks from Firestore
     async function loadVideoDetails(videoId, resetPlayer = true) {
       try {
-        const res = await fetch(`/api/videos/${videoId}`);
+        const res = await apiFetch(`/api/videos/${videoId}`);
         if (!res.ok) throw new Error('Video not found');
 
         const data = await res.json();
@@ -1234,7 +1502,8 @@
         // Configure Video Player streaming endpoint
         if (resetPlayer) {
           const videoPlayer = document.getElementById('inspectorVideoPlayer');
-          const videoSrc = `/api/videos/${videoId}/video`;
+          const token = getAuthToken();
+          const videoSrc = `/api/videos/${encodeURIComponent(videoId)}/video` + (token ? `?token=${encodeURIComponent(token)}` : '');
           document.getElementById('videoSourceTag').src = videoSrc;
           videoPlayer.load();
         }
@@ -1499,7 +1768,7 @@
     async function reprocessCurrentVideo() {
       if (!activeVideoData || !confirm(`Re-run extraction pipeline for ${activeVideoData.video.video_id}?`)) return;
       try {
-        const res = await fetch(`/api/videos/${activeVideoData.video.video_id}/process`, { method: 'POST' });
+        const res = await apiFetch(`/api/videos/${activeVideoData.video.video_id}/process`, { method: 'POST' });
         if (res.ok) {
           alert('Pipeline re-processing triggered!');
           openVideoInspector(activeVideoData.video.video_id);
@@ -1516,7 +1785,7 @@
     async function deleteCurrentVideo() {
       if (!activeVideoData || !confirm(`Are you sure you want to delete ${activeVideoData.video.video_id} from Firestore?`)) return;
       try {
-        const res = await fetch(`/api/videos/${activeVideoData.video.video_id}`, { method: 'DELETE' });
+        const res = await apiFetch(`/api/videos/${activeVideoData.video.video_id}`, { method: 'DELETE' });
         if (res.ok) {
           alert('Video deleted.');
           switchTab('library');
