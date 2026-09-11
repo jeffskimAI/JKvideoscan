@@ -34,6 +34,6 @@ gcloud eventarc triggers create "${TRIGGER_NAME}" \
   --destination-run-region="${REGION}" \
   --event-filters="type=google.cloud.storage.object.v1.finalized" \
   --event-filters="bucket=${BUCKET_NAME}" \
-  --service-account="${PROJECT_ID}@appspot.gserviceaccount.com"
+  --service-account="jeffsvideoscan-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo "=== Eventarc trigger ${TRIGGER_NAME} successfully created! ==="

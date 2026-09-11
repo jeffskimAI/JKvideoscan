@@ -5,7 +5,7 @@ set -euo pipefail
 PROJECT_ID="${GCP_PROJECT:-$(gcloud config get-value project)}"
 REGION="${GCP_REGION:-us-central1}"
 SERVICE_NAME="jeffsvideoscan"
-IMAGE_TAG="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/jeffsvideoscan-repo/${SERVICE_NAME}:latest"
 
 echo "=== Deploying ${SERVICE_NAME} ==="
 echo "Project: ${PROJECT_ID}"
@@ -22,11 +22,12 @@ gcloud run deploy "${SERVICE_NAME}" \
   --image "${IMAGE_TAG}" \
   --platform managed \
   --region "${REGION}" \
+  --service-account "jeffsvideoscan-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
   --memory 4Gi \
   --cpu 2 \
   --timeout 900 \
   --concurrency 4 \
-  --set-env-vars "GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-2.5-flash" \
+  --set-env-vars "GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-2.5-flash,GCS_BUCKET=jeffsvideoscan-ingest" \
   --no-allow-unauthenticated
 
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" --platform managed --region "${REGION}" --format 'value(status.url)')
