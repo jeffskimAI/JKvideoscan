@@ -366,6 +366,24 @@ async def upload_video_and_config(
         content_type=video.content_type or "video/mp4",
     )
 
+    # Immediately initialize the Firestore document with status "PROCESSING"
+    # so that My Library and Metadata Results immediately reflect
+    # the new video in PROCESSING status without 404s
+    try:
+        orchestrator.firestore_repo.init_video_record(
+            video_id=clean_id,
+            filename=Path(video.filename or video_object).name,
+            gcs_bucket=bucket_name,
+            gcs_path=video_object,
+            config_path=config_object,
+            target_metadata=validated_metadata,
+            total_chunks=0,
+            duration_seconds=0.0,
+        )
+        logger.info(f"Initialized Firestore record for {clean_id} with status PROCESSING")
+    except Exception as e:
+        logger.warning(f"Could not immediately initialize Firestore record for {clean_id}: {e}")
+
     # 5. Initiate pipeline processing if requested
     if run_pipeline:
         logger.info(f"Adding background pipeline execution for video {clean_id}")

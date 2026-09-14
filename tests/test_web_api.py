@@ -213,10 +213,13 @@ def test_api_upload_with_builder_json(client):
     mock_storage = MagicMock()
     mock_storage.upload_file.return_value = "gs://jeffsvideoscan-ingest/uploaded_demo.mp4"
     mock_storage.upload_json.return_value = "gs://jeffsvideoscan-ingest/uploaded_demo_config.json"
+    mock_repo = MagicMock()
 
     orig_storage = orchestrator.storage_manager
+    orig_repo = orchestrator.firestore_repo
     try:
         orchestrator.storage_manager = mock_storage
+        orchestrator.firestore_repo = mock_repo
 
         video_content = b"fake video bytes for testing"
         config_json = json.dumps({
@@ -243,8 +246,15 @@ def test_api_upload_with_builder_json(client):
         # Verify storage manager was called with video and config
         assert mock_storage.upload_json.called
         assert mock_storage.upload_file.called
+
+        # Verify firestore record was initialized immediately with status PROCESSING
+        assert mock_repo.init_video_record.called
+        call_kwargs = mock_repo.init_video_record.call_args.kwargs
+        assert call_kwargs["video_id"] == "custom_test_id"
+        assert call_kwargs["target_metadata"] == ["scene_description", "chunk_summary", "detected_objects"]
     finally:
         orchestrator.storage_manager = orig_storage
+        orchestrator.firestore_repo = orig_repo
 
 
 def test_api_upload_with_config_file(client):

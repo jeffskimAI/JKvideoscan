@@ -202,7 +202,7 @@
             <line x1="17" y1="17" x2="22" y2="17"></line>
             <line x1="17" y1="7" x2="22" y2="7"></line>
           </svg>
-          <span>Firestore Library</span>
+          <span>My Library</span>
           <span id="libraryBadge" class="ml-1 px-1.5 py-0.2 rounded-full bg-slate-700 text-[10px] text-slate-300">0</span>
         </button>
         <button id="navInspector" onclick="switchTab('inspector')" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-1.5">
@@ -210,14 +210,14 @@
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <span>Metadata Inspector</span>
+          <span>Metadata Results</span>
         </button>
         <button id="navCatalog" onclick="switchTab('catalog')" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-1.5">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
-          <span class="hidden sm:inline">Catalog</span>
+          <span>Metadata Extractor</span>
         </button>
 
         <div class="h-4 w-px bg-slate-800 mx-1"></div>
@@ -571,10 +571,10 @@
         </div>
         <div>
           <h3 class="text-base font-semibold text-white">No Video Selected</h3>
-          <p class="text-xs text-slate-400 mt-1">Select a video from the Firestore Library or upload a new one to inspect extracted metadata.</p>
+          <p class="text-xs text-slate-400 mt-1">Select a video from My Library or upload a new one to inspect extracted metadata.</p>
         </div>
         <button onclick="switchTab('library')" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500">
-          Browse Video Library
+          Browse My Library
         </button>
       </div>
 
@@ -722,12 +722,12 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 4: METADATA CATALOG GUIDE              -->
+    <!-- TAB 4: METADATA EXTRACTOR GUIDE            -->
     <!-- ========================================== -->
     <section id="tabCatalogSection" class="hidden space-y-6">
       <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
         <div>
-          <h2 class="text-xl font-bold text-white">Supported Metadata Catalog Dictionary</h2>
+          <h2 class="text-xl font-bold text-white">Metadata Extractor Dictionary</h2>
           <p class="text-xs text-slate-400 mt-1">
             Reference definitions matching <code class="text-indigo-400">metadata_catalog.md</code>. Vertex AI Gemini generates structured JSON schemas conforming to these 17 supported fields.
           </p>
@@ -759,6 +759,8 @@
     let appInfo = {};
     let catalogData = { categories: {}, all_keys: [] };
     let activeVideoData = null;
+    let currentVideoId = null;
+    let cachedVideos = [];
     let selectedVideoFile = null;
     let selectedConfigFile = null;
     let configMode = 'builder'; // 'builder' or 'file'
@@ -956,6 +958,19 @@
       window.location.hash = tabId;
       if (tabId === 'library') {
         fetchVideosList();
+      } else if (tabId === 'inspector') {
+        if (currentVideoId) {
+          if (!activeVideoData || !activeVideoData.video || activeVideoData.video.video_id !== currentVideoId) {
+            openVideoInspector(currentVideoId);
+          }
+        } else if (cachedVideos && cachedVideos.length > 0) {
+          const procVid = cachedVideos.find(v => v.status === 'PROCESSING');
+          const targetId = procVid ? procVid.video_id : cachedVideos[0].video_id;
+          openVideoInspector(targetId);
+        } else {
+          document.getElementById('inspectorEmptyState').classList.remove('hidden');
+          document.getElementById('inspectorActiveContent').classList.add('hidden');
+        }
       }
     }
 
@@ -1300,13 +1315,24 @@
           progressBar.style.width = '100%';
           percentLabel.textContent = '100%';
           titleLabel.textContent = 'Uploaded Successfully!';
-          descLabel.textContent = 'Files stored in GCS. Pipeline processing has started. Redirecting to Inspector...';
+          descLabel.textContent = 'Files stored in GCS. Pipeline processing has started. Redirecting to Metadata Results...';
 
           const resp = JSON.parse(xhr.responseText);
+          currentVideoId = resp.video_id;
+
+          // Clear inspector tab immediately and show PROCESSING to match Firestore library
+          clearInspectorTab(resp.video_id, 'PROCESSING', {
+            gcs_uri: resp.gcs_uri,
+            target_metadata: resp.target_metadata
+          });
+
           setTimeout(() => {
             statusBox.classList.add('hidden');
             progressBar.style.width = '0%';
-            openVideoInspector(resp.video_id);
+            openVideoInspector(resp.video_id, 'PROCESSING', {
+              gcs_uri: resp.gcs_uri,
+              target_metadata: resp.target_metadata
+            });
           }, 1200);
         } else if (xhr.status === 401) {
           setAuthToken(null);
@@ -1339,8 +1365,9 @@
         const res = await apiFetch('/api/videos');
         if (res.ok) {
           const data = await res.json();
-          renderVideosGrid(data.videos || []);
-          document.getElementById('libraryBadge').textContent = (data.videos || []).length;
+          cachedVideos = data.videos || [];
+          renderVideosGrid(cachedVideos);
+          document.getElementById('libraryBadge').textContent = cachedVideos.length;
         }
       } catch (e) {
         console.error('Failed to fetch videos from Firestore:', e);
@@ -1438,15 +1465,111 @@
       });
     }
 
-    // Open Video Metadata Inspector Detail View
-    async function openVideoInspector(videoId) {
-      switchTab('inspector');
+    // Clear and reset all Metadata Inspector elements
+    function clearInspectorTab(videoId, status = 'PROCESSING', meta = {}) {
       document.getElementById('inspectorEmptyState').classList.add('hidden');
       document.getElementById('inspectorActiveContent').classList.remove('hidden');
 
-      // Set Loading Placeholder
+      // Video title
       document.getElementById('inspectorVideoTitle').textContent = videoId;
-      document.getElementById('chunksMetadataCardsList').innerHTML = '<div class="text-xs text-slate-400 py-12 text-center">Loading metadata and chunk records from Firestore...</div>';
+
+      // Status badge: exactly match the Firestore library badge appearance and text
+      const badge = document.getElementById('inspectorStatusBadge');
+      if (status === 'COMPLETED') {
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
+      } else if (status === 'PROCESSING') {
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
+      } else {
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
+      }
+
+      // Metadata Header Info
+      const bucket = meta.gcs_bucket || appInfo.gcs_bucket || 'jeffsvideoscan-ingest';
+      const path = meta.gcs_path || `${videoId}.mp4`;
+      document.getElementById('inspectorGcsUri').textContent = meta.gcs_uri || `gs://${bucket}/${path}`;
+      document.getElementById('inspectorDuration').textContent = (meta.duration_seconds && meta.duration_seconds > 0) ? `${meta.duration_seconds.toFixed(1)}s` : '--';
+      document.getElementById('inspectorChunksCount').textContent = meta.total_chunks || '0';
+      document.getElementById('inspectorChunksHeaderCount').textContent = status === 'PROCESSING' ? 'Processing...' : `${meta.total_chunks || 0} chunks extracted`;
+      document.getElementById('inspectorModel').textContent = meta.model_version || appInfo.gemini_model || 'gemini-2.5-flash';
+
+      // Target Metadata Tags
+      const tagsContainer = document.getElementById('inspectorTargetTags');
+      if (meta.target_metadata && meta.target_metadata.length > 0) {
+        tagsContainer.innerHTML = meta.target_metadata.map(t => `
+          <span class="px-2 py-0.5 rounded-md bg-slate-800 text-indigo-300 font-mono text-[11px] border border-slate-700/60">${t}</span>
+        `).join('');
+      } else {
+        tagsContainer.innerHTML = '<span class="text-xs text-slate-500">Configured on upload</span>';
+      }
+
+      // Reset Scrubber and Video Player Time Label
+      document.getElementById('playerCurrentTimeLabel').textContent = '00:00 / 00:00';
+      document.getElementById('chunksTimelineScrubber').innerHTML = '<span class="text-xs text-slate-500">Awaiting chunks...</span>';
+
+      // Configure / Reset Video Player source
+      const token = getAuthToken();
+      const videoSrc = `/api/videos/${encodeURIComponent(videoId)}/video` + (token ? `?token=${encodeURIComponent(token)}` : '');
+      const videoPlayer = document.getElementById('inspectorVideoPlayer');
+      const sourceTag = document.getElementById('videoSourceTag');
+      if (sourceTag.getAttribute('src') !== videoSrc) {
+        sourceTag.src = videoSrc;
+        videoPlayer.load();
+      }
+
+      // Clear Extracted Insights Cards List and show processing loader if status is PROCESSING
+      if (status === 'PROCESSING') {
+        document.getElementById('chunksMetadataCardsList').innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
+            <svg class="animate-spin w-6 h-6 text-indigo-400 mx-auto" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <p class="text-sm font-semibold text-white">Extracting 10s chunks via Vertex AI Gemini...</p>
+            <p class="text-xs text-slate-400">Chunks will appear dynamically as they are written into Cloud Firestore.</p>
+          </div>
+        `;
+      } else {
+        document.getElementById('chunksMetadataCardsList').innerHTML = '<div class="text-xs text-slate-400 py-12 text-center">Loading metadata and chunk records from Firestore...</div>';
+      }
+
+      // Set activeVideoData so buttons (Download JSON, Reprocess, Delete) work immediately
+      activeVideoData = {
+        video: {
+          video_id: videoId,
+          status: status,
+          gcs_bucket: bucket,
+          gcs_path: path,
+          gcs_uri: meta.gcs_uri || `gs://${bucket}/${path}`,
+          target_metadata: meta.target_metadata || [],
+          duration_seconds: meta.duration_seconds || 0,
+          total_chunks: meta.total_chunks || 0,
+          ...meta
+        },
+        chunks: []
+      };
+    }
+
+    // Open Video Metadata Inspector Detail View
+    async function openVideoInspector(videoId, initialStatus = null, meta = {}) {
+      currentVideoId = videoId;
+      switchTab('inspector');
+
+      // Determine initial status if known from cachedVideos
+      let status = initialStatus;
+      if (!status && cachedVideos && cachedVideos.length > 0) {
+        const found = cachedVideos.find(v => v.video_id === videoId);
+        if (found) {
+          status = found.status;
+          meta = { ...found, ...meta };
+        }
+      }
+      if (!status) status = 'PROCESSING';
+
+      // Always clear the tab immediately and show status matching Firestore library
+      clearInspectorTab(videoId, status, meta);
 
       await loadVideoDetails(videoId);
 
@@ -1463,9 +1586,16 @@
 
     // Load detailed video record + chunks from Firestore
     async function loadVideoDetails(videoId, resetPlayer = true) {
+      currentVideoId = videoId;
       try {
         const res = await apiFetch(`/api/videos/${videoId}`);
-        if (!res.ok) throw new Error('Video not found');
+        if (!res.ok) {
+          if (res.status === 404 && activeVideoData && activeVideoData.video && activeVideoData.video.status === 'PROCESSING') {
+            console.warn(`Video ${videoId} not yet in Firestore, waiting for pipeline...`);
+            return;
+          }
+          throw new Error('Video not found');
+        }
 
         const data = await res.json();
         activeVideoData = data;
@@ -1475,37 +1605,42 @@
         // Header
         document.getElementById('inspectorVideoTitle').textContent = v.video_id || videoId;
         document.getElementById('inspectorGcsUri').textContent = data.gcs_uri || `gs://${v.gcs_bucket}/${v.gcs_path}`;
-        document.getElementById('inspectorDuration').textContent = (v.duration_seconds || 0).toFixed(1) + 's';
-        document.getElementById('inspectorChunksCount').textContent = chunks.length;
-        document.getElementById('inspectorChunksHeaderCount').textContent = `${chunks.length} chunks extracted`;
+        document.getElementById('inspectorDuration').textContent = (v.duration_seconds && v.duration_seconds > 0) ? (v.duration_seconds.toFixed(1) + 's') : '--';
+        document.getElementById('inspectorChunksCount').textContent = v.total_chunks || chunks.length;
+        document.getElementById('inspectorChunksHeaderCount').textContent = v.status === 'PROCESSING' ? (chunks.length > 0 ? `${chunks.length} chunks extracted (processing...)` : 'Processing...') : `${chunks.length} chunks extracted`;
         document.getElementById('inspectorModel').textContent = (chunks[0] && chunks[0].model_version) ? chunks[0].model_version : (appInfo.gemini_model || 'gemini-2.5-flash');
 
-        // Status badge
+        // Status badge: match Firestore library
         const badge = document.getElementById('inspectorStatusBadge');
         if (v.status === 'COMPLETED') {
-          badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold';
-          badge.textContent = 'COMPLETED';
+          badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
         } else if (v.status === 'PROCESSING') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
-          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING (Extracting...)</span>';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
         } else {
-          badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold';
-          badge.textContent = 'FAILED';
+          badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
         }
 
         // Target Metadata Tags
         const tagsContainer = document.getElementById('inspectorTargetTags');
-        tagsContainer.innerHTML = (v.target_metadata || []).map(t => `
-          <span class="px-2 py-0.5 rounded-md bg-slate-800 text-indigo-300 font-mono text-[11px] border border-slate-700/60">${t}</span>
-        `).join('');
+        if (v.target_metadata && v.target_metadata.length > 0) {
+          tagsContainer.innerHTML = v.target_metadata.map(t => `
+            <span class="px-2 py-0.5 rounded-md bg-slate-800 text-indigo-300 font-mono text-[11px] border border-slate-700/60">${t}</span>
+          `).join('');
+        }
 
         // Configure Video Player streaming endpoint
         if (resetPlayer) {
           const videoPlayer = document.getElementById('inspectorVideoPlayer');
           const token = getAuthToken();
           const videoSrc = `/api/videos/${encodeURIComponent(videoId)}/video` + (token ? `?token=${encodeURIComponent(token)}` : '');
-          document.getElementById('videoSourceTag').src = videoSrc;
-          videoPlayer.load();
+          const sourceTag = document.getElementById('videoSourceTag');
+          if (sourceTag.getAttribute('src') !== videoSrc) {
+            sourceTag.src = videoSrc;
+            videoPlayer.load();
+          }
         }
 
         // Render Scrubber
@@ -1516,7 +1651,9 @@
 
       } catch (err) {
         console.error('Failed to load video details:', err);
-        document.getElementById('chunksMetadataCardsList').innerHTML = `<div class="p-6 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-xs">Error loading metadata: ${err.message}</div>`;
+        if (!activeVideoData || !activeVideoData.video || activeVideoData.video.status !== 'PROCESSING') {
+          document.getElementById('chunksMetadataCardsList').innerHTML = `<div class="p-6 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-xs">Error loading metadata: ${err.message}</div>`;
+        }
       }
     }
 
@@ -1754,11 +1891,15 @@
 
     // Download entire video metadata as a JSON file
     function downloadMetadataJson() {
-      if (!activeVideoData) return;
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(activeVideoData, null, 2));
+      const vidData = activeVideoData || (currentVideoId ? { video: { video_id: currentVideoId, status: 'PROCESSING' }, chunks: [] } : null);
+      if (!vidData || !vidData.video) {
+        alert('No video metadata available to download.');
+        return;
+      }
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(vidData, null, 2));
       const a = document.createElement('a');
       a.setAttribute('href', dataStr);
-      a.setAttribute('download', `${activeVideoData.video.video_id}_metadata.json`);
+      a.setAttribute('download', `${vidData.video.video_id}_metadata.json`);
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1766,12 +1907,17 @@
 
     // Reprocess Video
     async function reprocessCurrentVideo() {
-      if (!activeVideoData || !confirm(`Re-run extraction pipeline for ${activeVideoData.video.video_id}?`)) return;
+      const vid = (activeVideoData && activeVideoData.video && activeVideoData.video.video_id) || currentVideoId;
+      if (!vid) {
+        alert('No video selected.');
+        return;
+      }
+      if (!confirm(`Re-run extraction pipeline for ${vid}?`)) return;
       try {
-        const res = await apiFetch(`/api/videos/${activeVideoData.video.video_id}/process`, { method: 'POST' });
+        const res = await apiFetch(`/api/videos/${encodeURIComponent(vid)}/process`, { method: 'POST' });
         if (res.ok) {
           alert('Pipeline re-processing triggered!');
-          openVideoInspector(activeVideoData.video.video_id);
+          openVideoInspector(vid, 'PROCESSING');
         } else {
           const err = await res.json();
           alert('Failed to trigger reprocessing: ' + (err.detail || err.error));
@@ -1783,11 +1929,23 @@
 
     // Delete Video from Firestore
     async function deleteCurrentVideo() {
-      if (!activeVideoData || !confirm(`Are you sure you want to delete ${activeVideoData.video.video_id} from Firestore?`)) return;
+      const vid = (activeVideoData && activeVideoData.video && activeVideoData.video.video_id) || currentVideoId;
+      if (!vid) {
+        alert('No video selected.');
+        return;
+      }
+      if (!confirm(`Are you sure you want to delete ${vid} from Firestore?`)) return;
       try {
-        const res = await apiFetch(`/api/videos/${activeVideoData.video.video_id}`, { method: 'DELETE' });
+        const res = await apiFetch(`/api/videos/${encodeURIComponent(vid)}`, { method: 'DELETE' });
         if (res.ok) {
           alert('Video deleted.');
+          activeVideoData = null;
+          currentVideoId = null;
+          if (cachedVideos) {
+            cachedVideos = cachedVideos.filter(v => v.video_id !== vid);
+          }
+          document.getElementById('inspectorEmptyState').classList.remove('hidden');
+          document.getElementById('inspectorActiveContent').classList.add('hidden');
           switchTab('library');
         } else {
           alert('Failed to delete video.');
