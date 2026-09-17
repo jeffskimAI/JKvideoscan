@@ -60,15 +60,31 @@ class GeminiExtractor:
         retry=retry_if_exception_type((ConnectionError, TimeoutError)),
     )
     def _call_model(self, contents: list, config: types.GenerateContentConfig) -> str:
-        """Invokes the model with retry logic."""
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=contents,
-            config=config,
-        )
-        if not response.text:
-            raise GeminiExtractionError("Gemini returned empty response text.")
-        return response.text
+        """Invokes the model with retry logic and graceful fallback if the model is not found in Vertex AI."""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=config,
+            )
+            if not response.text:
+                raise GeminiExtractionError("Gemini returned empty response text.")
+            return response.text
+        except Exception as e:
+            if ("not found" in str(e).lower() or "404" in str(e)) and self.model_name != "gemini-2.5-flash":
+                logger.warning(
+                    f"Configured model '{self.model_name}' not found on Vertex AI. "
+                    f"Falling back to 'gemini-2.5-flash' to complete extraction: {e}"
+                )
+                fallback_response = self.client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents,
+                    config=config,
+                )
+                if not fallback_response.text:
+                    raise GeminiExtractionError("Gemini fallback returned empty response text.")
+                return fallback_response.text
+            raise e
 
     def extract_chunk_metadata(
         self,
