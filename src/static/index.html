@@ -220,6 +220,14 @@
           <span>Metadata Extractor</span>
         </button>
 
+        <button id="navLogsBtn" onclick="openSystemLogsModal()" title="View System & Execution Logs" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-400 hover:text-indigo-300 hover:bg-slate-800 border border-slate-700/60 flex items-center space-x-1.5">
+          <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          <span class="hidden sm:inline">Live Logs</span>
+        </button>
+
         <div class="h-4 w-px bg-slate-800 mx-1"></div>
 
         <!-- Lock Button -->
@@ -751,6 +759,157 @@
   </div>
   <!-- /MAIN APP WRAPPER (#appRoot) -->
 
+  <!-- ========================================== -->
+  <!-- MODAL: VIDEO EXECUTION LOGS & DIAGNOSTICS  -->
+  <!-- ========================================== -->
+  <div id="videoLogsModal" class="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="relative w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white font-mono" id="videoLogsModalTitle">video_id</h3>
+            <p class="text-[11px] text-slate-400">Execution logs and diagnostic analysis from Cloud Firestore</p>
+          </div>
+        </div>
+        <button onclick="closeVideoLogsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        <!-- Error Description Banner (visible if failed) -->
+        <div id="videoLogsModalErrorBanner" class="hidden bg-rose-950/50 border border-rose-800/80 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between text-xs font-semibold text-rose-300">
+            <span class="flex items-center space-x-1.5">
+              <svg class="w-4 h-4 text-rose-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span id="videoLogsModalErrorSummary">Pipeline Error</span>
+            </span>
+          </div>
+          <p id="videoLogsModalErrorDesc" class="text-xs text-rose-200/90 leading-relaxed font-sans whitespace-pre-wrap"></p>
+        </div>
+
+        <!-- Logs Terminal -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-slate-300 uppercase tracking-wider text-[11px]">Pipeline Logs</span>
+            <span id="videoLogsModalCount" class="font-mono text-slate-400 text-[10px]">0 logs</span>
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto" id="videoLogsModalContent">
+            Loading logs...
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+        <button onclick="copyModalLogs()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 flex items-center space-x-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span id="copyModalLogsBtnText">Copy Logs</span>
+        </button>
+        <button onclick="closeVideoLogsModal()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: LIVE SYSTEM & PIPELINE LOGS         -->
+  <!-- ========================================== -->
+  <div id="systemLogsModal" class="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Live System & Pipeline Logs</h3>
+            <p class="text-[11px] text-slate-400">In-memory circular event buffer & error diagnostics</p>
+          </div>
+        </div>
+        <button onclick="closeSystemLogsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Controls: Level filter, search, refresh -->
+      <div class="p-3 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center space-x-2">
+          <label class="text-slate-400 text-[11px] font-semibold">Filter:</label>
+          <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900 p-0.5 text-xs">
+            <button onclick="setSystemLogLevelFilter('')" id="logFilterAll" class="px-2.5 py-1 rounded-md font-medium text-white bg-indigo-600 transition-all">All</button>
+            <button onclick="setSystemLogLevelFilter('ERROR')" id="logFilterError" class="px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-rose-400 transition-all">ERROR</button>
+            <button onclick="setSystemLogLevelFilter('WARNING')" id="logFilterWarn" class="px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-amber-400 transition-all">WARN</button>
+            <button onclick="setSystemLogLevelFilter('INFO')" id="logFilterInfo" class="px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-cyan-400 transition-all">INFO</button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 flex-1 max-w-sm justify-end">
+          <div class="relative w-full">
+            <input 
+              type="text" 
+              id="systemLogsSearchInput" 
+              placeholder="Search in logs..." 
+              oninput="onSystemLogsSearch()"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 pl-7 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500"
+            >
+            <svg class="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+
+          <button onclick="fetchSystemLogs()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center space-x-1 flex-shrink-0" title="Refresh">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Logs Content Terminal -->
+      <div class="p-4 overflow-y-auto flex-1 bg-slate-950 font-mono text-[11px] leading-relaxed max-h-[55vh]" id="systemLogsModalContent">
+        Loading system logs...
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
+        <span id="systemLogsModalFooterStatus">Showing up to 100 entries</span>
+        <button onclick="closeSystemLogsModal()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================================================== -->
   <!-- FRONTEND JAVASCRIPT APPLICATION LOGIC               -->
   <!-- ==================================================== -->
@@ -771,6 +930,21 @@
       'overall_sentiment'
     ]);
     let pollInterval = null;
+    let systemLogsData = [];
+    let currentSystemLogLevel = '';
+    let currentSystemLogSearch = '';
+    let currentModalLogs = [];
+    let currentModalVideoId = '';
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
     // ==========================================
     // AUTHENTICATION & ACCESS CONTROL
@@ -1339,21 +1513,27 @@
           showAuthGate('Session expired. Please re-enter the password.');
         } else {
           let errDetail = xhr.statusText;
+          let errDesc = '';
           try {
             const err = JSON.parse(xhr.responseText);
             errDetail = err.detail || err.error || errDetail;
+            errDesc = err.error_description || '';
           } catch (_) {}
-          titleLabel.textContent = 'Upload Failed';
-          descLabel.textContent = errDetail;
+          titleLabel.textContent = 'Upload / Validation Failed: ' + errDetail;
+          descLabel.textContent = errDesc ? (errDesc + ' Check Live Logs for detailed stack trace.') : (errDetail + '. Check Live Logs for details.');
+          percentLabel.textContent = 'Failed';
           progressBar.style.backgroundColor = '#f43f5e';
-          alert('Upload error: ' + errDetail);
+          progressBar.style.width = '100%';
         }
       };
 
       xhr.onerror = () => {
         submitBtn.disabled = false;
         titleLabel.textContent = 'Upload Connection Error';
-        descLabel.textContent = 'Failed to connect to the server.';
+        descLabel.textContent = 'Failed to connect to the server. Check your network connection or verify Cloud Run service status in Live Logs.';
+        percentLabel.textContent = 'Failed';
+        progressBar.style.backgroundColor = '#f43f5e';
+        progressBar.style.width = '100%';
       };
 
       xhr.send(formData);
@@ -1400,17 +1580,51 @@
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span></span>';
         }
 
-        const tags = (v.target_metadata || []).slice(0, 4).map(t => `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-300">${t}</span>`).join('');
+        const tags = (v.target_metadata || []).slice(0, 4).map(t => `<span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-300">${escapeHtml(t)}</span>`).join('');
         const moreTags = (v.target_metadata || []).length > 4 ? `<span class="text-[10px] text-slate-500">+${v.target_metadata.length - 4} more</span>` : '';
         const dur = v.duration_seconds ? `${v.duration_seconds.toFixed(1)}s` : 'Unknown';
 
+        let failureBox = '';
+        if (status === 'FAILED') {
+          const errMsg = v.error_description || v.error_message || 'Video processing failed.';
+          failureBox = `
+            <div class="p-2.5 bg-rose-950/40 border border-rose-800/70 rounded-xl space-y-1 text-xs">
+              <div class="flex items-center justify-between text-rose-300 font-semibold">
+                <span class="flex items-center space-x-1.5 text-[11px]">
+                  <svg class="w-3.5 h-3.5 text-rose-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  <span>Processing Failed</span>
+                </span>
+                <button 
+                  type="button" 
+                  onclick="event.stopPropagation(); openVideoLogsModal('${escapeHtml(v.video_id)}')" 
+                  class="text-[10px] text-rose-400 hover:text-rose-200 underline font-mono"
+                >
+                  View Logs
+                </button>
+              </div>
+              <p class="text-rose-200/90 text-[11px] leading-relaxed line-clamp-2" title="${escapeHtml(errMsg)}">
+                ${escapeHtml(errMsg)}
+              </p>
+            </div>
+          `;
+        }
+
+        const actionBtnClass = status === 'FAILED'
+          ? 'bg-rose-950/50 hover:bg-rose-900/80 text-rose-300 hover:text-white border-rose-800/60'
+          : 'bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/30';
+        const actionBtnLabel = status === 'FAILED' ? 'Inspect Failure & Logs' : 'Inspect Metadata';
+
         return `
-          <div class="video-card bg-slate-900 border border-slate-800 hover:border-indigo-500/60 rounded-2xl p-5 space-y-4 transition-all group flex flex-col justify-between shadow-lg shadow-black/20" data-id="${v.video_id}" data-filename="${v.filename || ''}">
+          <div class="video-card bg-slate-900 border ${status === 'FAILED' ? 'border-rose-900/50 hover:border-rose-500/60' : 'border-slate-800 hover:border-indigo-500/60'} rounded-2xl p-5 space-y-4 transition-all group flex flex-col justify-between shadow-lg shadow-black/20" data-id="${escapeHtml(v.video_id)}" data-filename="${escapeHtml(v.filename || '')}">
             <div class="space-y-3">
               <div class="flex items-start justify-between gap-2">
                 <div>
-                  <h3 class="text-sm font-bold text-white font-mono truncate max-w-[200px] group-hover:text-indigo-300 transition-colors">${v.video_id}</h3>
-                  <p class="text-xs text-slate-400 truncate max-w-[200px] mt-0.5">${v.filename || ''}</p>
+                  <h3 class="text-sm font-bold text-white font-mono truncate max-w-[200px] ${status === 'FAILED' ? 'group-hover:text-rose-300' : 'group-hover:text-indigo-300'} transition-colors">${escapeHtml(v.video_id)}</h3>
+                  <p class="text-xs text-slate-400 truncate max-w-[200px] mt-0.5">${escapeHtml(v.filename || '')}</p>
                 </div>
                 ${statusBadge}
               </div>
@@ -1418,13 +1632,15 @@
               <div class="p-2.5 bg-slate-950/70 rounded-xl space-y-1 text-[11px] border border-slate-800/80">
                 <div class="flex items-center justify-between text-slate-400">
                   <span>GCS URI:</span>
-                  <span class="font-mono text-cyan-400 truncate max-w-[170px]" title="${v.gcs_uri || ''}">${v.gcs_uri || 'gs://...'}</span>
+                  <span class="font-mono text-cyan-400 truncate max-w-[170px]" title="${escapeHtml(v.gcs_uri || '')}">${escapeHtml(v.gcs_uri || 'gs://...')}</span>
                 </div>
                 <div class="flex items-center justify-between text-slate-400">
                   <span>Duration / Chunks:</span>
                   <span class="text-slate-200 font-medium">${dur} &middot; ${v.total_chunks || 0} chunks</span>
                 </div>
               </div>
+
+              ${failureBox}
 
               <div class="space-y-1">
                 <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Target Metadata:</div>
@@ -1435,12 +1651,12 @@
             </div>
 
             <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-              <span class="text-[10px] text-slate-500">${(v.created_at || '').substring(0, 10)}</span>
+              <span class="text-[10px] text-slate-500">${escapeHtml((v.created_at || '').substring(0, 10))}</span>
               <button 
-                onclick="openVideoInspector('${v.video_id}')" 
-                class="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold transition-all flex items-center space-x-1"
+                onclick="openVideoInspector('${escapeHtml(v.video_id)}')" 
+                class="px-3 py-1.5 rounded-lg ${actionBtnClass} border text-xs font-semibold transition-all flex items-center space-x-1"
               >
-                <span>Inspect Metadata</span>
+                <span>${actionBtnLabel}</span>
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
@@ -1531,6 +1747,8 @@
             <p class="text-xs text-slate-400">Chunks will appear dynamically as they are written into Cloud Firestore.</p>
           </div>
         `;
+      } else if (status === 'FAILED') {
+        renderChunkMetadataCards([], { video_id: videoId, status: 'FAILED', ...meta });
       } else {
         document.getElementById('chunksMetadataCardsList').innerHTML = '<div class="text-xs text-slate-400 py-12 text-center">Loading metadata and chunk records from Firestore...</div>';
       }
@@ -1647,7 +1865,7 @@
         renderTimelineScrubber(chunks, v.duration_seconds || 0);
 
         // Render Chunks Cards
-        renderChunkMetadataCards(chunks);
+        renderChunkMetadataCards(chunks, v);
 
       } catch (err) {
         console.error('Failed to load video details:', err);
@@ -1732,9 +1950,23 @@
     }
 
     // Render Extracted Chunk Cards
-    function renderChunkMetadataCards(chunks) {
+    function renderChunkMetadataCards(chunks, videoRecord = null) {
       const container = document.getElementById('chunksMetadataCardsList');
+      const v = videoRecord || (activeVideoData && activeVideoData.video) || {};
+      const isFailed = (v.status || '').toUpperCase() === 'FAILED';
+
+      let failureHtml = '';
+      if (isFailed) {
+        failureHtml = renderFailureDiagnosticsCard(v);
+      }
+
       if (!chunks || chunks.length === 0) {
+        if (isFailed) {
+          container.innerHTML = failureHtml;
+          return;
+        }
+
+        // PROCESSING or awaiting
         container.innerHTML = `
           <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
             <svg class="animate-spin w-6 h-6 text-indigo-400 mx-auto" viewBox="0 0 24 24" fill="none">
@@ -1748,7 +1980,19 @@
         return;
       }
 
-      container.innerHTML = chunks.map((c, idx) => {
+      let partialNoticeHtml = '';
+      if (isFailed) {
+        partialNoticeHtml = `
+          <div class="pt-4 border-t border-slate-800/80">
+            <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-2 mb-3">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>Partial Chunks Extracted Before Failure (${chunks.length})</span>
+            </h4>
+          </div>
+        `;
+      }
+
+      const cardsHtml = chunks.map((c, idx) => {
         const meta = c.extracted_metadata || {};
         const start = (c.start_time_seconds || 0).toFixed(1);
         const end = (c.end_time_seconds || 10).toFixed(1);
@@ -1762,7 +2006,7 @@
           if (s.includes('pos')) color = 'bg-emerald-950/60 text-emerald-300 border-emerald-800';
           else if (s.includes('neu')) color = 'bg-sky-950/60 text-sky-300 border-sky-800';
           else if (s.includes('ten') || s.includes('neg') || s.includes('fru')) color = 'bg-amber-950/60 text-amber-300 border-amber-800';
-          sentimentPill = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border ${color} capitalize">${meta.overall_sentiment}</span>`;
+          sentimentPill = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border ${color} capitalize">${escapeHtml(meta.overall_sentiment)}</span>`;
         }
 
         // Detected Objects tags with confidence
@@ -1775,7 +2019,7 @@
                 ${meta.detected_objects.map(obj => {
                   let label = typeof obj === 'string' ? obj : (obj.label || JSON.stringify(obj));
                   let conf = (typeof obj === 'object' && obj.confidence) ? `<span class="opacity-75 font-mono text-[9px] ml-1">(${(obj.confidence * 100).toFixed(0)}%)</span>` : '';
-                  return `<span class="px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 text-xs font-medium flex items-center">${label}${conf}</span>`;
+                  return `<span class="px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 text-xs font-medium flex items-center">${escapeHtml(label)}${conf}</span>`;
                 }).join('')}
               </div>
             </div>
@@ -1788,7 +2032,7 @@
           sceneHtml = `
             <div class="bg-slate-950/80 border-l-2 border-indigo-500 rounded-r-xl p-3 text-xs text-slate-200 italic space-y-1">
               <span class="text-[10px] uppercase font-bold text-indigo-400 not-italic block tracking-wider">Scene Description</span>
-              <p class="leading-relaxed">"${meta.scene_description}"</p>
+              <p class="leading-relaxed">"${escapeHtml(meta.scene_description)}"</p>
             </div>
           `;
         }
@@ -1801,9 +2045,9 @@
             <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs space-y-1">
               <div class="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                 <span class="text-amber-400">Audio Transcript ${spk}</span>
-                <span class="text-slate-500 font-mono">${meta.vocal_emotion || ''}</span>
+                <span class="text-slate-500 font-mono">${escapeHtml(meta.vocal_emotion || '')}</span>
               </div>
-              <p class="text-slate-200 font-serif leading-relaxed">"${meta.transcript}"</p>
+              <p class="text-slate-200 font-serif leading-relaxed">"${escapeHtml(meta.transcript)}"</p>
             </div>
           `;
         }
@@ -1815,7 +2059,7 @@
             <div class="space-y-1">
               <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Key Actions:</span>
               <ul class="list-disc list-inside text-xs text-slate-300 space-y-0.5">
-                ${meta.key_actions.map(act => `<li>${act}</li>`).join('')}
+                ${meta.key_actions.map(act => `<li>${escapeHtml(act)}</li>`).join('')}
               </ul>
             </div>
           `;
@@ -1831,7 +2075,7 @@
 
         const otherPillsHtml = otherPills.length > 0 ? `
           <div class="flex flex-wrap gap-1.5 pt-1">
-            ${otherPills.map(p => `<span class="px-2 py-0.5 rounded bg-slate-950 text-[11px] text-slate-400 border border-slate-800">${p}</span>`).join('')}
+            ${otherPills.map(p => `<span class="px-2 py-0.5 rounded bg-slate-950 text-[11px] text-slate-400 border border-slate-800">${escapeHtml(p)}</span>`).join('')}
           </div>
         ` : '';
 
@@ -1868,7 +2112,7 @@
             </div>
 
             <!-- Chunk Summary -->
-            ${meta.chunk_summary ? `<p class="text-xs font-medium text-slate-300 leading-relaxed">${meta.chunk_summary}</p>` : ''}
+            ${meta.chunk_summary ? `<p class="text-xs font-medium text-slate-300 leading-relaxed">${escapeHtml(meta.chunk_summary)}</p>` : ''}
 
             <!-- Rich Metadata Sections -->
             ${sceneHtml}
@@ -1882,11 +2126,331 @@
               <summary class="text-slate-500 hover:text-slate-300 cursor-pointer font-mono select-none">
                 { } View chunk JSON document
               </summary>
-              <pre class="mt-2 p-3 bg-slate-950 rounded-lg text-emerald-400 font-mono text-[10px] overflow-x-auto border border-slate-800">${JSON.stringify(c, null, 2)}</pre>
+              <pre class="mt-2 p-3 bg-slate-950 rounded-lg text-emerald-400 font-mono text-[10px] overflow-x-auto border border-slate-800">${escapeHtml(JSON.stringify(c, null, 2))}</pre>
             </details>
           </div>
         `;
       }).join('');
+
+      container.innerHTML = failureHtml + partialNoticeHtml + cardsHtml;
+    }
+
+    // Render Failure Diagnostics & Logs Panel inside Inspector
+    function renderFailureDiagnosticsCard(v) {
+      const videoId = v.video_id || currentVideoId || 'unknown';
+      const errMsg = v.error_message || 'Video processing encountered a failure in the pipeline.';
+      const errDesc = v.error_description || 'No diagnostic root-cause explanation available. Check execution logs below for stack traces.';
+      const logs = Array.isArray(v.logs) ? v.logs : [];
+
+      return `
+        <div class="bg-slate-900 border-2 border-rose-500/50 rounded-2xl p-6 space-y-5 shadow-xl shadow-rose-950/20">
+          
+          <!-- Failure Header -->
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start space-x-3.5">
+              <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center flex-shrink-0 text-rose-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-base font-bold text-rose-300">Pipeline Execution Failure</h3>
+                  <span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-mono font-bold uppercase">FAILED</span>
+                </div>
+                <p class="text-xs text-rose-200/90 font-mono font-medium leading-relaxed">${escapeHtml(errMsg)}</p>
+              </div>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="flex items-center space-x-2 flex-shrink-0">
+              <button 
+                type="button" 
+                onclick="reprocessCurrentVideo()"
+                class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-xs font-semibold transition-all flex items-center space-x-1"
+                title="Retry processing this video"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span>Retry</span>
+              </button>
+              <button 
+                type="button" 
+                onclick="copyDiagnosticReport('${escapeHtml(videoId)}')"
+                id="copyReportBtn"
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-all flex items-center space-x-1"
+                title="Copy error details and logs to clipboard"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span id="copyReportBtnText">Copy Diagnostic Report</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Detailed Error Description Box -->
+          <div class="bg-slate-950/80 border border-rose-900/50 rounded-xl p-4 space-y-2">
+            <div class="flex items-center space-x-2 text-xs font-semibold text-rose-400 uppercase tracking-wider">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>Error Diagnosis & Suggested Resolution</span>
+            </div>
+            <p class="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">${escapeHtml(errDesc)}</p>
+          </div>
+
+          <!-- Execution Logs Section -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Pipeline Execution Logs</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono text-[10px]">${logs.length} events</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button 
+                  type="button" 
+                  onclick="reloadVideoLogs('${escapeHtml(videoId)}')" 
+                  class="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center space-x-1"
+                >
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                  <span>Refresh Logs</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Terminal Window -->
+            <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden font-mono text-[11px] leading-relaxed shadow-inner">
+              <div class="bg-slate-900/80 px-3 py-1.5 border-b border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                <div class="flex items-center space-x-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block"></span>
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+                  <span class="ml-2 font-medium text-slate-400">pipeline-execution.log</span>
+                </div>
+                <span>${escapeHtml(videoId)}</span>
+              </div>
+              <div class="p-3 max-h-72 overflow-y-auto space-y-1" id="inspectorLogsTerminal">
+                ${renderLogsListHtml(logs)}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      `;
+    }
+
+    // Render formatted list of structured log entries
+    function renderLogsListHtml(logs) {
+      if (!logs || logs.length === 0) {
+        return '<div class="text-slate-500 italic py-3 text-center">No execution log events recorded.</div>';
+      }
+
+      return logs.map(l => {
+        if (typeof l === 'string') {
+          return `<div class="py-1 text-slate-300 whitespace-pre-wrap break-all">${escapeHtml(l)}</div>`;
+        }
+        const time = (l.timestamp || '').replace('T', ' ').substring(0, 19);
+        const level = (l.level || 'INFO').toUpperCase();
+        const stage = l.stage ? `[${l.stage}]` : '';
+        const msg = l.message || '';
+
+        let levelColor = 'text-slate-400 bg-slate-800/80 border-slate-700';
+        if (level === 'ERROR') levelColor = 'text-rose-400 bg-rose-950/60 border-rose-800';
+        else if (level === 'WARNING' || level === 'WARN') levelColor = 'text-amber-400 bg-amber-950/60 border-amber-800';
+        else if (level === 'INFO') levelColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60';
+
+        const isErrorLine = level === 'ERROR' || msg.includes('Traceback') || msg.includes('Error:');
+
+        return `
+          <div class="py-1 px-1.5 rounded flex items-start space-x-2 ${isErrorLine ? 'bg-rose-950/20' : 'hover:bg-slate-900/50'}">
+            <span class="text-slate-500 flex-shrink-0 select-none text-[10px]">${escapeHtml(time)}</span>
+            <span class="px-1.5 py-0.2 rounded border text-[10px] font-bold ${levelColor} flex-shrink-0">${escapeHtml(level)}</span>
+            ${stage ? `<span class="text-indigo-400 font-semibold flex-shrink-0 text-[10px]">${escapeHtml(stage)}</span>` : ''}
+            <span class="text-slate-200 flex-1 whitespace-pre-wrap break-all">${escapeHtml(msg)}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Copy Diagnostic Report (Error + Description + Logs)
+    async function copyDiagnosticReport(videoId) {
+      const v = (activeVideoData && activeVideoData.video) || {};
+      const report = {
+        video_id: videoId || v.video_id,
+        status: v.status,
+        error_message: v.error_message,
+        error_description: v.error_description,
+        logs: v.logs || []
+      };
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+        const btnText = document.getElementById('copyReportBtnText');
+        if (btnText) {
+          btnText.textContent = 'Copied!';
+          setTimeout(() => btnText.textContent = 'Copy Diagnostic Report', 2000);
+        }
+      } catch (e) {
+        alert('Copied report to clipboard failed: ' + e.message);
+      }
+    }
+
+    // Refresh logs in the inspector terminal directly from /api/videos/{video_id}/logs
+    async function reloadVideoLogs(videoId) {
+      try {
+        const res = await apiFetch(`/api/videos/${encodeURIComponent(videoId)}/logs`);
+        if (res.ok) {
+          const data = await res.json();
+          if (activeVideoData && activeVideoData.video) {
+            activeVideoData.video.logs = data.logs || [];
+            activeVideoData.video.error_description = data.error_description || activeVideoData.video.error_description;
+          }
+          const term = document.getElementById('inspectorLogsTerminal');
+          if (term) {
+            term.innerHTML = renderLogsListHtml(data.logs || []);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to reload video logs:', e);
+      }
+    }
+
+    // Open Video Logs Modal (accessible from Library cards)
+    async function openVideoLogsModal(videoId) {
+      currentModalVideoId = videoId;
+      const modal = document.getElementById('videoLogsModal');
+      const title = document.getElementById('videoLogsModalTitle');
+      const count = document.getElementById('videoLogsModalCount');
+      const content = document.getElementById('videoLogsModalContent');
+      const errBanner = document.getElementById('videoLogsModalErrorBanner');
+      const errSummary = document.getElementById('videoLogsModalErrorSummary');
+      const errDesc = document.getElementById('videoLogsModalErrorDesc');
+
+      title.textContent = videoId;
+      content.innerHTML = '<div class="text-slate-400 py-4 text-center">Fetching logs from Firestore...</div>';
+      errBanner.classList.add('hidden');
+      modal.classList.remove('hidden');
+
+      try {
+        const res = await apiFetch(`/api/videos/${encodeURIComponent(videoId)}/logs`);
+        if (res.ok) {
+          const data = await res.json();
+          currentModalLogs = data.logs || [];
+          count.textContent = `${currentModalLogs.length} logs`;
+          content.innerHTML = renderLogsListHtml(currentModalLogs);
+
+          if (data.error_message || data.error_description) {
+            errSummary.textContent = data.error_message || 'Video Processing Failure';
+            errDesc.textContent = data.error_description || 'No diagnostic explanation recorded.';
+            errBanner.classList.remove('hidden');
+          }
+        } else {
+          content.innerHTML = '<div class="text-rose-400 py-4 text-center">Failed to load logs.</div>';
+        }
+      } catch (e) {
+        content.innerHTML = `<div class="text-rose-400 py-4 text-center">Error: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function closeVideoLogsModal() {
+      document.getElementById('videoLogsModal').classList.add('hidden');
+    }
+
+    async function copyModalLogs() {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(currentModalLogs, null, 2));
+        const btn = document.getElementById('copyModalLogsBtnText');
+        if (btn) {
+          btn.textContent = 'Copied!';
+          setTimeout(() => btn.textContent = 'Copy Logs', 2000);
+        }
+      } catch (e) {
+        alert('Copy failed: ' + e.message);
+      }
+    }
+
+    // Open Live System Logs Modal
+    async function openSystemLogsModal() {
+      document.getElementById('systemLogsModal').classList.remove('hidden');
+      await fetchSystemLogs();
+    }
+
+    function closeSystemLogsModal() {
+      document.getElementById('systemLogsModal').classList.add('hidden');
+    }
+
+    function setSystemLogLevelFilter(level) {
+      currentSystemLogLevel = level;
+      const filters = {
+        '': 'logFilterAll',
+        'ERROR': 'logFilterError',
+        'WARNING': 'logFilterWarn',
+        'INFO': 'logFilterInfo'
+      };
+      Object.entries(filters).forEach(([lvl, btnId]) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        if (lvl === level) {
+          btn.className = 'px-2.5 py-1 rounded-md font-medium text-white bg-indigo-600 transition-all';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-white transition-all';
+        }
+      });
+      renderFilteredSystemLogs();
+    }
+
+    function onSystemLogsSearch() {
+      currentSystemLogSearch = (document.getElementById('systemLogsSearchInput').value || '').toLowerCase();
+      renderFilteredSystemLogs();
+    }
+
+    async function fetchSystemLogs() {
+      const content = document.getElementById('systemLogsModalContent');
+      content.innerHTML = '<div class="text-slate-400 py-4 text-center">Fetching system logs...</div>';
+      try {
+        const url = `/api/logs?limit=200${currentSystemLogLevel ? `&level=${currentSystemLogLevel}` : ''}${currentSystemLogSearch ? `&search=${encodeURIComponent(currentSystemLogSearch)}` : ''}`;
+        const res = await apiFetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          systemLogsData = data.logs || [];
+          renderFilteredSystemLogs();
+        } else {
+          content.innerHTML = '<div class="text-rose-400 py-4 text-center">Failed to fetch system logs.</div>';
+        }
+      } catch (e) {
+        content.innerHTML = `<div class="text-rose-400 py-4 text-center">Error: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderFilteredSystemLogs() {
+      const content = document.getElementById('systemLogsModalContent');
+      const footerStatus = document.getElementById('systemLogsModalFooterStatus');
+      let filtered = systemLogsData;
+      if (currentSystemLogLevel) {
+        filtered = filtered.filter(l => (l.level || '').toUpperCase() === currentSystemLogLevel);
+      }
+      if (currentSystemLogSearch) {
+        filtered = filtered.filter(l => {
+          const s = (l.message || '') + ' ' + (l.stage || '') + ' ' + (l.level || '');
+          return s.toLowerCase().includes(currentSystemLogSearch);
+        });
+      }
+      if (footerStatus) {
+        footerStatus.textContent = `Showing ${filtered.length} of ${systemLogsData.length} entries`;
+      }
+      content.innerHTML = renderLogsListHtml(filtered);
     }
 
     // Download entire video metadata as a JSON file

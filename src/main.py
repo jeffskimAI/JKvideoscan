@@ -14,7 +14,8 @@ from pydantic import BaseModel
 
 from src.catalog import get_catalog_summary, parse_config_payload, validate_target_metadata
 from src.config import settings
-from src.logger import logger
+from src.error_handler import describe_error
+from src.logger import get_system_logs, logger
 from src.pipeline_orchestrator import PipelineOrchestrator
 
 app = FastAPI(
@@ -90,7 +91,7 @@ def require_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please enter the app password (demopepper999!).",
+            detail="Authentication required. Please enter the app password (joanisawful).",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -231,6 +232,47 @@ async def get_video_detail(video_id: str):
     }
 
 
+@app.get("/api/logs", dependencies=[Depends(require_auth)])
+async def get_system_log_entries(
+    limit: int = 100,
+    level: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """Retrieves system and pipeline logs from the in-memory circular buffer."""
+    safe_limit = max(1, min(limit, 500))
+    logs = get_system_logs(limit=safe_limit, level=level, search=search)
+    return {
+        "logs": logs,
+        "count": len(logs),
+        "limit": safe_limit,
+        "level": level,
+        "search": search,
+    }
+
+
+@app.get("/api/videos/{video_id}/logs", dependencies=[Depends(require_auth)])
+async def get_video_pipeline_logs(video_id: str):
+    """Retrieves failure diagnostics, error descriptions, and execution logs for a specific video."""
+    record = orchestrator.firestore_repo.get_video_record(video_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video '{video_id}' not found.",
+        )
+    logs = record.get("logs") or []
+    if not logs:
+        # Fallback to in-memory system logs matching video_id
+        logs = get_system_logs(limit=200, search=video_id)
+
+    return {
+        "video_id": video_id,
+        "status": record.get("status"),
+        "error_message": record.get("error_message"),
+        "error_description": record.get("error_description"),
+        "logs": logs,
+    }
+
+
 @app.get("/api/videos/{video_id}/video", dependencies=[Depends(require_auth)])
 async def stream_video(video_id: str, request: Request):
     """Streams video file from Google Cloud Storage with HTTP 206 Partial Content support."""
@@ -331,9 +373,11 @@ async def upload_video_and_config(
     try:
         validated_metadata = parse_config_payload(config_dict)
     except Exception as e:
+        err_info = describe_error(e, stage="config_validation")
+        logger.error(f"Configuration validation error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Configuration validation error: {e}",
+            detail=f"Configuration validation error: {e}. {err_info['description']}",
         )
 
     # 3. Read video contents
@@ -501,9 +545,15 @@ async def handle_cloudevent(request: Request):
         return JSONResponse(status_code=status.HTTP_200_OK, content=result)
     except Exception as e:
         logger.exception(f"Pipeline execution failed: {e}")
+        err_info = describe_error(e, stage="cloudevent_ingestion", context={"bucket": bucket, "object_name": object_name})
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"status": "ERROR", "error": str(e)},
+            content={
+                "status": "ERROR",
+                "error": str(e),
+                "error_description": err_info["description"],
+                "logs": err_info.get("traceback", "").splitlines(),
+            },
         )
 
 

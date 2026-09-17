@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     temp_dir: str = Field(default="/tmp/videoprocessing")
 
     # Authentication
-    app_password: str = Field(default="demopepper999!", description="Password required to access Web App")
+    app_password: str = Field(default="joanisawful", description="Password required to access Web App")
     auth_secret_key: str = Field(default="jeffsvideoscan-secret-salt-2026")
 
     # Server Configuration

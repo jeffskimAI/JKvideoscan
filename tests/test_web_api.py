@@ -11,7 +11,7 @@ from tests.test_firestore_repo import MockFirestoreClient
 
 @pytest.fixture
 def auth_headers():
-    return {"X-App-Password": "demopepper999!"}
+    return {"X-App-Password": "joanisawful"}
 
 
 @pytest.fixture
@@ -46,14 +46,15 @@ def test_auth_login_and_verification(unauth_client):
     res_unauth = unauth_client.get("/api/info")
     assert res_unauth.status_code == 401
     assert "Authentication required" in res_unauth.json()["detail"]
+    assert "joanisawful" in res_unauth.json()["detail"]
 
     # 2. Login with incorrect password returns 401
     res_bad = unauth_client.post("/api/auth/login", json={"password": "wrong_password!"})
     assert res_bad.status_code == 401
     assert "Incorrect password" in res_bad.json()["detail"]
 
-    # 3. Login with correct password 'demopepper999!' returns 200 and session token
-    res_login = unauth_client.post("/api/auth/login", json={"password": "demopepper999!"})
+    # 3. Login with correct password 'joanisawful' returns 200 and session token
+    res_login = unauth_client.post("/api/auth/login", json={"password": "joanisawful"})
     assert res_login.status_code == 200
     login_data = res_login.json()
     assert login_data["success"] is True
@@ -335,3 +336,80 @@ def test_api_delete_video(client):
         assert repo.get_video_record("to_delete") is None
     finally:
         orchestrator.firestore_repo = orig_repo
+
+
+def test_api_system_logs(client):
+    """Test retrieving system and execution logs via GET /api/logs."""
+    from src.logger import logger
+
+    logger.info("Test log message for system log query")
+    logger.error("Test error message for system log query")
+
+    res = client.get("/api/logs?limit=50")
+    assert res.status_code == 200
+    data = res.json()
+    assert "logs" in data
+    assert isinstance(data["logs"], list)
+    assert data["count"] > 0
+
+    # Filter by level
+    res_err = client.get("/api/logs?level=ERROR")
+    assert res_err.status_code == 200
+    err_data = res_err.json()
+    for item in err_data["logs"]:
+        assert item["level"] == "ERROR"
+
+
+def test_api_video_logs_and_failure_diagnostics(client):
+    """Test retrieving failure diagnostics and logs for a failed video."""
+    mock_db = MockFirestoreClient()
+    from src.firestore_repo import FirestoreRepository
+    repo = FirestoreRepository(client=mock_db, collection_name="videos")
+
+    sample_logs = [
+        {"timestamp": "2026-09-17T01:00:00Z", "level": "INFO", "stage": "video_download", "message": "Downloading video..."},
+        {"timestamp": "2026-09-17T01:00:05Z", "level": "ERROR", "stage": "video_probing", "message": "ffprobe: Invalid data found when processing input"},
+    ]
+
+    repo.init_video_record(
+        video_id="failed_vid_01",
+        filename="corrupted.mp4",
+        gcs_bucket="test-bucket",
+        gcs_path="corrupted.mp4",
+        config_path="corrupted_config.json",
+        target_metadata=["scene_description"],
+        total_chunks=0,
+        duration_seconds=0.0,
+    )
+    repo.fail_video_processing(
+        video_id="failed_vid_01",
+        error_message="Invalid data found when processing input",
+        error_description="FFprobe failed to inspect the video stream metadata. Verify that the video is a valid MP4/H.264 file.",
+        logs=sample_logs,
+    )
+
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.firestore_repo = repo
+
+        # 1. Detail endpoint returns error_description and logs
+        res_detail = client.get("/api/videos/failed_vid_01")
+        assert res_detail.status_code == 200
+        vid_data = res_detail.json()["video"]
+        assert vid_data["status"] == "FAILED"
+        assert "Invalid data found" in vid_data["error_message"]
+        assert "FFprobe failed to inspect" in vid_data["error_description"]
+        assert len(vid_data["logs"]) == 2
+
+        # 2. Logs-specific endpoint returns logs
+        res_logs = client.get("/api/videos/failed_vid_01/logs")
+        assert res_logs.status_code == 200
+        logs_data = res_logs.json()
+        assert logs_data["video_id"] == "failed_vid_01"
+        assert logs_data["status"] == "FAILED"
+        assert logs_data["error_description"] is not None
+        assert len(logs_data["logs"]) == 2
+        assert logs_data["logs"][1]["level"] == "ERROR"
+    finally:
+        orchestrator.firestore_repo = orig_repo
+

@@ -1,10 +1,12 @@
 """Pipeline Orchestrator for end-to-end video processing."""
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from src.catalog import parse_config_payload
 from src.config import settings
+from src.error_handler import describe_error
 from src.firestore_repo import FirestoreRepository
 from src.gemini_extractor import GeminiExtractor
 from src.logger import logger
@@ -74,31 +76,62 @@ class PipelineOrchestrator:
         force: bool = False,
     ) -> Dict[str, Any]:
         """Executes full extraction pipeline for a paired video and config."""
+        pipeline_logs: List[Dict[str, Any]] = []
+
+        def log_step(level: str, msg: str, stage: str = "general") -> None:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            pipeline_logs.append({
+                "timestamp": now_iso,
+                "level": level,
+                "stage": stage,
+                "message": msg,
+            })
+            log_fn = getattr(logger, level.lower(), logger.info)
+            log_fn(f"[{video_id}][{stage}] {msg}")
+
+        current_stage = "pre_check"
+        log_step("INFO", f"Starting video pipeline execution for video_id='{video_id}'", current_stage)
+
         existing = self.firestore_repo.get_video_record(video_id)
         if existing and not force:
             status = existing.get("status")
             if status == "PROCESSING":
-                logger.info(f"Video {video_id} is already PROCESSING. Skipping duplicate run.")
+                log_step("INFO", f"Video {video_id} is already PROCESSING. Skipping duplicate run.", "pre_check")
                 return {"status": "PROCESSING", "video_id": video_id, "message": "Already processing"}
 
         work_dir = self.temp_base_dir / video_id
         work_dir.mkdir(parents=True, exist_ok=True)
 
-
         try:
             # 1. Download and parse configuration
+            current_stage = "config_retrieval"
+            log_step("INFO", f"Downloading configuration gs://{bucket_name}/{config_object}", current_stage)
             config_dict = self.storage_manager.download_json_as_dict(bucket_name, config_object)
+
+            current_stage = "config_validation"
             target_metadata = parse_config_payload(config_dict)
-            logger.info(f"Target metadata keys for {video_id}: {target_metadata}")
+            log_step("INFO", f"Validated {len(target_metadata)} target metadata keys: {target_metadata}", current_stage)
 
             # 2. Download video file
+            current_stage = "video_download"
             local_video_path = work_dir / Path(video_object).name
+            log_step("INFO", f"Downloading video gs://{bucket_name}/{video_object} to {local_video_path.name}", current_stage)
             self.storage_manager.download_blob_to_file(bucket_name, video_object, local_video_path)
+            log_step("INFO", f"Video downloaded successfully ({local_video_path.stat().st_size} bytes)", current_stage)
 
             # 3. Probe video metadata
+            current_stage = "video_probing"
+            log_step("INFO", f"Probing video stream properties using ffprobe...", current_stage)
             probe_info = probe_video(local_video_path, chunk_duration_sec=settings.chunk_duration_seconds)
+            log_step(
+                "INFO",
+                f"Probed video: duration={probe_info.duration:.2f}s, total_chunks={probe_info.total_chunks}, codec={probe_info.codec_name}",
+                current_stage,
+            )
 
             # 4. Initialize Firestore document
+            current_stage = "firestore_init"
+            log_step("INFO", f"Initializing Firestore record for {video_id} with status PROCESSING", current_stage)
             self.firestore_repo.init_video_record(
                 video_id=video_id,
                 filename=Path(video_object).name,
@@ -111,16 +144,21 @@ class PipelineOrchestrator:
             )
 
             # 5. Segment into strict 10-second chunks using FFmpeg
+            current_stage = "video_segmentation"
             chunks_dir = work_dir / "chunks"
+            log_step("INFO", f"Segmenting video into strict {settings.chunk_duration_seconds}s chunks with FFmpeg...", current_stage)
             chunks = segment_video(
                 local_video_path,
                 chunks_dir,
                 chunk_duration_sec=settings.chunk_duration_seconds,
             )
+            log_step("INFO", f"Successfully generated {len(chunks)} video segments", current_stage)
 
             # 6. Extract metadata for each chunk via Vertex AI Gemini
-            logger.info(f"Extracting metadata across {len(chunks)} chunks for {video_id}...")
-            for chunk in chunks:
+            current_stage = "gemini_extraction"
+            log_step("INFO", f"Beginning Gemini metadata extraction across {len(chunks)} chunks with model={self.gemini_extractor.model_name}...", current_stage)
+            for idx, chunk in enumerate(chunks):
+                log_step("INFO", f"Extracting chunk {chunk.index + 1}/{len(chunks)} ({chunk.start_time_seconds:.1f}s - {chunk.end_time_seconds:.1f}s)...", current_stage)
                 chunk_metadata = self.gemini_extractor.extract_chunk_metadata(
                     chunk=chunk,
                     target_keys=target_metadata,
@@ -131,22 +169,46 @@ class PipelineOrchestrator:
                     extracted_metadata=chunk_metadata,
                     model_version=self.gemini_extractor.model_name,
                 )
+                log_step("INFO", f"Saved metadata for chunk {chunk.index} to Firestore subcollection", current_stage)
 
             # 7. Complete video processing in Firestore
+            current_stage = "completion"
+            log_step("INFO", f"Marking video={video_id} as COMPLETED in Firestore", current_stage)
             self.firestore_repo.complete_video_processing(video_id)
 
-            logger.info(f"Successfully processed video pipeline for {video_id} ({len(chunks)} chunks)")
+            log_step("INFO", f"Pipeline completed successfully for {video_id} ({len(chunks)} chunks, {probe_info.duration:.1f}s)", current_stage)
             return {
                 "status": "COMPLETED",
                 "video_id": video_id,
                 "total_chunks": len(chunks),
                 "duration_seconds": probe_info.duration,
+                "logs": pipeline_logs,
             }
 
         except Exception as e:
+            err_diag = describe_error(
+                exception=e,
+                stage=current_stage,
+                context={
+                    "video_id": video_id,
+                    "bucket_name": bucket_name,
+                    "video_object": video_object,
+                    "config_object": config_object,
+                },
+            )
+            log_step(
+                "ERROR",
+                f"Pipeline failed at stage '{current_stage}': {e}\n{err_diag['description']}\n{err_diag.get('traceback', '')}",
+                current_stage,
+            )
             logger.exception(f"Pipeline failed for video_id={video_id}: {e}")
             try:
-                self.firestore_repo.fail_video_processing(video_id, str(e))
+                self.firestore_repo.fail_video_processing(
+                    video_id=video_id,
+                    error_message=str(e),
+                    error_description=err_diag["description"],
+                    logs=pipeline_logs,
+                )
             except Exception as fe:
                 logger.error(f"Failed to record failure state in Firestore: {fe}")
             raise e

@@ -87,6 +87,8 @@ class FirestoreRepository:
             "created_at": now,
             "updated_at": now,
             "error_message": None,
+            "error_description": None,
+            "logs": [],
         }
 
         doc_ref = self.client.collection(self.collection_name).document(video_id)
@@ -138,22 +140,41 @@ class FirestoreRepository:
         """Marks video processing status as 'COMPLETED'."""
         now = self._now_iso()
         doc_ref = self.client.collection(self.collection_name).document(video_id)
-        doc_ref.update({
+        doc_ref.set({
             "status": "COMPLETED",
             "updated_at": now,
-        })
+            "error_message": None,
+            "error_description": None,
+        }, merge=True)
         logger.info(f"Marked video={video_id} as COMPLETED")
 
-    def fail_video_processing(self, video_id: str, error_message: str) -> None:
-        """Marks video processing status as 'FAILED' with error details."""
+    def fail_video_processing(
+        self,
+        video_id: str,
+        error_message: str,
+        error_description: Optional[str] = None,
+        logs: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        """Marks video processing status as 'FAILED' with error descriptions and execution logs."""
         now = self._now_iso()
         doc_ref = self.client.collection(self.collection_name).document(video_id)
-        doc_ref.update({
+        update_data: Dict[str, Any] = {
             "status": "FAILED",
             "error_message": error_message,
+            "error_description": error_description or error_message,
             "updated_at": now,
-        })
+        }
+        if logs is not None:
+            update_data["logs"] = logs
+        doc_ref.set(update_data, merge=True)
         logger.warning(f"Marked video={video_id} as FAILED: {error_message}")
+
+    def get_video_logs(self, video_id: str) -> List[Dict[str, Any]]:
+        """Retrieves execution logs recorded for a video."""
+        rec = self.get_video_record(video_id)
+        if rec and "logs" in rec and isinstance(rec["logs"], list):
+            return rec["logs"]
+        return []
 
     def get_video_record(self, video_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves video document data if present."""

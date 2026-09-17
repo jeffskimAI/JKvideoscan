@@ -144,6 +144,70 @@ METADATA_CATALOG: Dict[str, MetadataFieldDefinition] = {
         description="Detection of any explicit, violent, or unsafe content.",
         example=["None detected"],
     ),
+
+    # 5. Sports & Key Play Metadata
+    "sport_type": MetadataFieldDefinition(
+        key="sport_type",
+        category="Sports & Key Play Metadata",
+        python_type=str,
+        description="Classification of the active sport being broadcast (e.g. Soccer, Tennis, American Football, Baseball, Boxing).",
+        example="Soccer",
+    ),
+    "sports_play_type": MetadataFieldDefinition(
+        key="sports_play_type",
+        category="Sports & Key Play Metadata",
+        python_type=str,
+        description="Canonical play/action taxonomy classification distinguishing routine play from key plays (e.g. soccer_goal, tennis_break_point, football_interception, baseball_home_run, boxing_knockdown).",
+        example="soccer_goal",
+    ),
+    "significance_score": MetadataFieldDefinition(
+        key="significance_score",
+        category="Sports & Key Play Metadata",
+        python_type=float,
+        description="Composite game-impact and editorial leverage score (0.00-1.00) distinguishing routine actions (~0.10-0.40) from significant moments (~0.80-1.00).",
+        example=0.92,
+    ),
+    "detection_confidence": MetadataFieldDefinition(
+        key="detection_confidence",
+        category="Sports & Key Play Metadata",
+        python_type=float,
+        description="Model confidence probability (0.00-1.00) that the sports event occurred and matches canonical taxonomy.",
+        example=0.98,
+    ),
+    "game_state": MetadataFieldDefinition(
+        key="game_state",
+        category="Sports & Key Play Metadata",
+        python_type=Dict[str, Any],
+        description="Structured game state context (score delta, period/round, game clock, scorebug OCR).",
+        example={"score": "2-2", "period": "Stoppage Time (90+3')", "time_remaining": "00:45", "scorebug_ocr": "HOME 2 - AWAY 2 (90:15)"},
+    ),
+    "significance_factors": MetadataFieldDefinition(
+        key="significance_factors",
+        category="Sports & Key Play Metadata",
+        python_type=List[str],
+        description="Multimodal explainability breakdown driving the significance score (game leverage, audio spikes/crowd noise, visual/referee signals, event rarity).",
+        example=["Late stoppage-time equalizer", "Crowd acoustic peak", "Team dogpile celebration", "OCR scorebug update"],
+    ),
+    "recommended_clip_window": MetadataFieldDefinition(
+        key="recommended_clip_window",
+        category="Sports & Key Play Metadata",
+        python_type=Dict[str, Any],
+        description="Suggested clip boundaries (seconds) including buildup, peak event, celebration, and suggested duration.",
+        example={"buildup_start_sec": 2.0, "peak_event_sec": 5.5, "celebration_end_sec": 10.0, "recommended_duration_sec": 30.0},
+    ),
+    "sports_key_plays": MetadataFieldDefinition(
+        key="sports_key_plays",
+        category="Sports & Key Play Metadata",
+        python_type=List[Dict[str, Any]],
+        description="Complete structured array of detected key plays with taxonomy, confidence, significance, game state, and clip windows for in-stream carousels and recap reels.",
+        example=[{
+            "play_type": "soccer_goal",
+            "detection_confidence": 0.98,
+            "significance_score": 0.92,
+            "game_state": {"score": "2-2", "period": "90+3'"},
+            "recommended_clip_window": {"buildup_start_sec": 2.0, "peak_event_sec": 5.5, "celebration_end_sec": 10.0},
+        }],
+    ),
 }
 
 SUPPORTED_METADATA_KEYS = set(METADATA_CATALOG.keys())
