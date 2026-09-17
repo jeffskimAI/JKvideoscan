@@ -32,5 +32,8 @@ gcloud run deploy "${SERVICE_NAME}" \
   --set-env-vars "GCP_PROJECT=${PROJECT_ID},GCP_REGION=${REGION},GEMINI_MODEL=gemini-3.8-flash,GEMINI_LOCATION=global,GCS_BUCKET=jeffsvideoscan-ingest,APP_PASSWORD=joanisawful,SERVICE_ACCOUNT_EMAIL=jeffsvideoscan-sa@${PROJECT_ID}.iam.gserviceaccount.com,MAX_CONCURRENT_CHUNKS=35" \
   --allow-unauthenticated
 
+# 3. Ensure 100% traffic routes to latest revision
+gcloud run services update-traffic "${SERVICE_NAME}" --to-latest --platform managed --region "${REGION}"
+
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" --platform managed --region "${REGION}" --format 'value(status.url)')
 echo "=== Successfully deployed ${SERVICE_NAME} to ${SERVICE_URL} ==="
