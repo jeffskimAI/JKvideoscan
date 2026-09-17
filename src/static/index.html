@@ -761,39 +761,39 @@
       <div id="inspectorActiveContent" class="hidden space-y-4">
         
         <!-- Video Details Header Bar -->
-        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div class="space-y-1">
-            <div class="flex flex-wrap items-center gap-3">
-              <h2 id="inspectorVideoTitle" class="text-xl font-bold text-white font-mono">video_id</h2>
-              <div class="flex flex-col items-start gap-1">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 overflow-hidden">
+          <div class="space-y-1 min-w-0 flex-1 max-w-full">
+            <div class="flex flex-wrap items-center gap-3 min-w-0">
+              <h2 id="inspectorVideoTitle" class="text-lg sm:text-xl font-bold text-white font-mono truncate max-w-full cursor-default" title="video_id">video_id</h2>
+              <div class="flex flex-col items-start gap-1 flex-shrink-0">
                 <span id="inspectorStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold">STATUS</span>
                 <span id="inspectorProgressCounter" class="text-[11px] font-mono text-amber-300 font-medium hidden"></span>
               </div>
               <!-- Video switcher dropdown for quick selection -->
-              <div class="relative inline-flex items-center">
-                <select id="inspectorVideoSelect" onchange="if(this.value) openVideoInspector(this.value)" class="bg-slate-950/80 border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-mono text-slate-200 px-2.5 py-1 focus:ring-1 focus:ring-indigo-500 focus:outline-none" title="Quickly switch inspected video">
+              <div class="relative inline-flex items-center flex-shrink-0">
+                <select id="inspectorVideoSelect" onchange="if(this.value) openVideoInspector(this.value)" class="bg-slate-950/80 border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-mono text-slate-200 px-2.5 py-1 focus:ring-1 focus:ring-indigo-500 focus:outline-none max-w-[180px] sm:max-w-[220px] truncate" title="Quickly switch inspected video">
                   <option value="">Switch Video...</option>
                 </select>
               </div>
             </div>
             
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 pt-1">
-              <span class="flex items-center space-x-1">
-                <span class="text-slate-500">GCS:</span>
-                <code id="inspectorGcsUri" class="text-cyan-400 font-mono select-all">gs://...</code>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 pt-1 min-w-0">
+              <span class="flex items-center space-x-1 min-w-0 max-w-full">
+                <span class="text-slate-500 flex-shrink-0">GCS:</span>
+                <code id="inspectorGcsUri" class="text-cyan-400 font-mono select-all truncate max-w-[200px] sm:max-w-xs md:max-w-md inline-block align-bottom" title="">gs://...</code>
               </span>
-              <span>&bull;</span>
-              <span class="flex items-center space-x-1">
+              <span class="flex-shrink-0">&bull;</span>
+              <span class="flex items-center space-x-1 flex-shrink-0">
                 <span class="text-slate-500">Duration:</span>
                 <span id="inspectorDuration" class="text-slate-200 font-medium">0s</span>
               </span>
-              <span>&bull;</span>
-              <span class="flex items-center space-x-1">
+              <span class="flex-shrink-0">&bull;</span>
+              <span class="flex items-center space-x-1 flex-shrink-0">
                 <span class="text-slate-500">Total Chunks:</span>
                 <span id="inspectorChunksCount" class="text-slate-200 font-medium">0</span>
               </span>
-              <span>&bull;</span>
-              <span class="flex items-center space-x-1">
+              <span class="flex-shrink-0">&bull;</span>
+              <span class="flex items-center space-x-1 flex-shrink-0">
                 <span class="text-slate-500">Model:</span>
                 <span id="inspectorModel" class="text-indigo-300 font-mono">gemini-3.8</span>
               </span>
@@ -1220,6 +1220,14 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+    }
+
+    // Truncate/concatenate long video titles with ellipsis so they do not run off the screen
+    function formatTruncatedTitle(title, maxLen = 40) {
+      if (!title) return '';
+      if (title.length <= maxLen) return title;
+      const sub = title.substring(0, maxLen - 3).replace(/[_\-\s]+$/, '');
+      return sub + '...';
     }
 
     // ==========================================
@@ -2318,7 +2326,10 @@
       document.getElementById('inspectorActiveContent').classList.remove('hidden');
 
       // Video title
-      document.getElementById('inspectorVideoTitle').textContent = videoId;
+      const fullTitle = videoId || '';
+      const titleEl = document.getElementById('inspectorVideoTitle');
+      titleEl.textContent = formatTruncatedTitle(fullTitle, 40);
+      titleEl.title = fullTitle;
 
       // Status badge: exactly match the Firestore library badge appearance and text
       const badge = document.getElementById('inspectorStatusBadge');
@@ -2509,8 +2520,14 @@
         if (sel) sel.value = videoId;
 
         // Header
-        document.getElementById('inspectorVideoTitle').textContent = v.video_id || videoId;
-        document.getElementById('inspectorGcsUri').textContent = data.gcs_uri || `gs://${v.gcs_bucket}/${v.gcs_path}`;
+        const fullTitle = v.video_id || videoId || '';
+        const titleEl = document.getElementById('inspectorVideoTitle');
+        titleEl.textContent = formatTruncatedTitle(fullTitle, 40);
+        titleEl.title = fullTitle;
+        const gcsUri = data.gcs_uri || `gs://${v.gcs_bucket}/${v.gcs_path}`;
+        const gcsEl = document.getElementById('inspectorGcsUri');
+        gcsEl.textContent = gcsUri;
+        gcsEl.title = gcsUri;
         document.getElementById('inspectorDuration').textContent = (v.duration_seconds && v.duration_seconds > 0) ? (v.duration_seconds.toFixed(1) + 's') : '--';
         document.getElementById('inspectorChunksCount').textContent = v.total_chunks || chunks.length;
         document.getElementById('inspectorChunksHeaderCount').textContent = v.status === 'PROCESSING' ? (chunks.length > 0 ? `${chunks.length} chunks extracted (processing...)` : 'Processing...') : `${chunks.length} chunks extracted`;
@@ -3976,9 +3993,9 @@
             <!-- Result Top Bar: Video ID, Time, Tags -->
             <div class="flex flex-wrap items-center justify-between gap-2 border-b ${isKeyPlay ? 'border-amber-500/30' : 'border-slate-800/80'} pb-3">
               <div class="flex items-center space-x-2 flex-wrap gap-y-1">
-                <span class="px-2 py-0.5 rounded-lg bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 text-[11px] font-mono font-medium flex items-center space-x-1">
-                  <svg class="w-3 h-3 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                  <span>${escapeHtml(videoId)}</span>
+                <span class="px-2 py-0.5 rounded-lg bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 text-[11px] font-mono font-medium flex items-center space-x-1" title="${escapeHtml(videoId)}">
+                  <svg class="w-3 h-3 text-indigo-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                  <span class="truncate max-w-[180px] sm:max-w-[240px]">${escapeHtml(formatTruncatedTitle(videoId, 36))}</span>
                 </span>
                 
                 <span class="px-2 py-0.5 rounded-lg ${isKeyPlay ? 'bg-amber-950/50 text-amber-200 border border-amber-500/40' : 'bg-slate-800 text-slate-300'} text-[11px] font-mono font-bold flex items-center space-x-1">
