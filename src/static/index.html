@@ -1392,12 +1392,34 @@
     }
 
     async function handleLogout() {
+      const videoPlayer = document.getElementById('inspectorVideoPlayer');
+      if (videoPlayer && !videoPlayer.paused) {
+        videoPlayer.pause();
+      }
       try {
         await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       } catch (e) {}
       setAuthToken(null);
       showAuthGate();
     }
+
+    // Stop video playback when browser tab becomes hidden or minimized
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        const videoPlayer = document.getElementById('inspectorVideoPlayer');
+        if (videoPlayer && !videoPlayer.paused) {
+          videoPlayer.pause();
+        }
+      }
+    });
+
+    // Listen to browser hash changes for tab navigation
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace('#', '');
+      if (['upload', 'library', 'inspector', 'catalog'].includes(hash)) {
+        switchTab(hash);
+      }
+    });
 
     function toggleAuthPasswordVisibility() {
       const pwdInput = document.getElementById('authPasswordInput');
@@ -1466,6 +1488,14 @@
         }
       });
       window.location.hash = tabId;
+
+      // Stop video playback when user leaves the Metadata Results (inspector) tab
+      if (tabId !== 'inspector') {
+        const videoPlayer = document.getElementById('inspectorVideoPlayer');
+        if (videoPlayer && !videoPlayer.paused) {
+          videoPlayer.pause();
+        }
+      }
 
       // Stop background inspector polling if navigating away from inspector tab
       if (tabId !== 'inspector' && pollInterval) {
