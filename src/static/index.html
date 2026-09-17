@@ -876,14 +876,31 @@
               <!-- Interactive 10s Timeline Scrubber -->
               <div class="space-y-2">
                 <div class="flex items-center justify-between text-xs text-slate-400">
-                  <div class="flex items-center space-x-2.5">
-                    <span class="font-medium text-slate-300">10-Second Chunk Scrubber</span>
-                    <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-yellow-500/10 border border-amber-400/40 text-[10px] font-black text-amber-300 shadow-sm shadow-amber-500/10">
-                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                      <span>⚡ Sports Key Plays Highlighted</span>
-                    </span>
+                  <div class="flex items-center space-x-2">
+                    <span class="font-medium text-slate-300 text-xs">10s Scrubber</span>
+                    
+                    <!-- Toggle: All Chunks <=> Key Plays Only -->
+                    <div id="keyPlaysFilterToggle" class="inline-flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-700 text-[10px] font-bold select-none">
+                      <button
+                        type="button"
+                        id="toggleFilterAll"
+                        onclick="setKeyPlaysFilter('all')"
+                        class="px-2 py-0.5 rounded-md transition-all cursor-pointer bg-indigo-600 text-white shadow-xs"
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        id="toggleFilterKeyPlays"
+                        onclick="setKeyPlaysFilter('key_plays_only')"
+                        class="px-2 py-0.5 rounded-md transition-all cursor-pointer text-amber-300 hover:text-white flex items-center space-x-1"
+                      >
+                        <span>⚡ Key Plays Only</span>
+                        <span id="keyPlaysCountBadge" class="ml-1 text-[9px] font-mono px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">0</span>
+                      </button>
+                    </div>
                   </div>
-                  <span id="playerCurrentTimeLabel" class="font-mono text-cyan-400">00:00 / 00:00</span>
+                  <span id="playerCurrentTimeLabel" class="font-mono text-cyan-400 text-xs">00:00 / 00:00</span>
                 </div>
                 <div id="chunksTimelineScrubber" class="flex gap-1.5 overflow-x-auto py-1">
                   <!-- Chunk timeline blocks rendered dynamically -->
@@ -2563,12 +2580,127 @@
         // Render Chunks Cards
         renderChunkMetadataCards(chunks, v);
 
+        // Update Key Plays filter toggle state and badge count (Item 4)
+        updateKeyPlaysFilterUI(chunks);
+
       } catch (err) {
         console.error('Failed to load video details:', err);
         if (!activeVideoData || !activeVideoData.video || activeVideoData.video.status !== 'PROCESSING') {
           document.getElementById('chunksMetadataCardsList').innerHTML = `<div class="p-6 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-xs">Error loading metadata: ${err.message}</div>`;
         }
       }
+    }
+
+    // Key Plays Filter State & Functions (Item 4)
+    let currentKeyPlaysFilter = 'all'; // 'all' | 'key_plays_only'
+
+    function setKeyPlaysFilter(filterMode) {
+      currentKeyPlaysFilter = filterMode;
+      const btnAll = document.getElementById('toggleFilterAll');
+      const btnKeyPlays = document.getElementById('toggleFilterKeyPlays');
+
+      if (filterMode === 'key_plays_only') {
+        if (btnAll) {
+          btnAll.className = 'px-2 py-0.5 rounded-md transition-all cursor-pointer text-slate-400 hover:text-slate-200 bg-transparent';
+        }
+        if (btnKeyPlays) {
+          btnKeyPlays.className = 'px-2 py-0.5 rounded-md transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-md shadow-amber-500/20 flex items-center space-x-1';
+        }
+
+        // Filter scrubber blocks
+        document.querySelectorAll('.scrubber-block').forEach(el => {
+          const isKp = el.getAttribute('data-has-key-play') === 'true';
+          el.style.display = isKp ? '' : 'none';
+        });
+
+        // Filter right-side chunk cards
+        document.querySelectorAll('.chunk-card').forEach(el => {
+          const isKp = el.getAttribute('data-has-key-play') === 'true';
+          el.style.display = isKp ? '' : 'none';
+        });
+
+        // Update header count label
+        const kpCards = document.querySelectorAll('.chunk-card[data-has-key-play="true"]');
+        const headerCount = document.getElementById('inspectorChunksHeaderCount');
+        if (headerCount) {
+          headerCount.textContent = `${kpCards.length} key play${kpCards.length === 1 ? '' : 's'}`;
+        }
+
+        // If current position not on key play, jump to first key play
+        const player = document.getElementById('inspectorVideoPlayer');
+        const curIdx = player ? Math.floor(player.currentTime / 10) : 0;
+        const currentCard = document.getElementById(`chunkCard_${curIdx}`);
+        if (!currentCard || currentCard.getAttribute('data-has-key-play') !== 'true') {
+          const firstKpCard = document.querySelector('.chunk-card[data-has-key-play="true"]');
+          if (firstKpCard) {
+            const firstIdx = parseInt(firstKpCard.id.replace('chunkCard_', ''), 10);
+            if (!isNaN(firstIdx)) {
+              seekVideoPlayer(firstIdx * 10);
+            }
+          }
+        }
+      } else {
+        if (btnAll) {
+          btnAll.className = 'px-2 py-0.5 rounded-md transition-all cursor-pointer bg-indigo-600 text-white font-bold shadow-xs';
+        }
+        if (btnKeyPlays) {
+          btnKeyPlays.className = 'px-2 py-0.5 rounded-md transition-all cursor-pointer text-amber-300 hover:text-white flex items-center space-x-1';
+        }
+
+        document.querySelectorAll('.scrubber-block').forEach(el => {
+          el.style.display = '';
+        });
+
+        document.querySelectorAll('.chunk-card').forEach(el => {
+          el.style.display = '';
+        });
+
+        const totalCards = document.querySelectorAll('.chunk-card');
+        const headerCount = document.getElementById('inspectorChunksHeaderCount');
+        if (headerCount) {
+          headerCount.textContent = `${totalCards.length} chunks`;
+        }
+      }
+    }
+
+    function updateKeyPlaysFilterUI(chunks) {
+      const kpCount = (chunks || []).filter(c => {
+        const m = c.extracted_metadata || {};
+        return m.sports_key_plays && Array.isArray(m.sports_key_plays) && m.sports_key_plays.length > 0;
+      }).length;
+
+      const badge = document.getElementById('keyPlaysCountBadge');
+      if (badge) {
+        badge.textContent = kpCount;
+      }
+
+      setKeyPlaysFilter(currentKeyPlaysFilter);
+    }
+
+    // Scroll selected chunk card to top visibility directly below sticky bar (Item 2)
+    function scrollChunkToTopVisibility(chunkIdx) {
+      const card = document.getElementById(`chunkCard_${chunkIdx}`);
+      if (!card) return;
+
+      const navBar = document.querySelector('header');
+      const searchBar = document.getElementById('topSearchBarSection');
+      const navHeight = navBar ? navBar.offsetHeight : 64;
+      const searchHeight = searchBar ? searchBar.offsetHeight : 52;
+      const stickyOffset = navHeight + searchHeight + 12;
+
+      const cardRect = card.getBoundingClientRect();
+      const targetY = window.pageYOffset + cardRect.top - stickyOffset;
+
+      window.scrollTo({
+        top: Math.max(0, targetY),
+        behavior: 'smooth'
+      });
+
+      // Visual flash indicator to show which chunk moved to top view
+      card.classList.add('ring-4', 'ring-indigo-500/80');
+      setTimeout(() => {
+        card.classList.remove('ring-4', 'ring-indigo-500/80');
+      }, 1500);
     }
 
     // Render interactive 10-second chunk scrubber blocks with Key Plays highlighted
@@ -2601,6 +2733,16 @@
           ? `<span class="block text-[8px] font-mono font-black uppercase tracking-wider text-amber-300 bg-amber-500/30 rounded px-1 mt-0.5">KEY PLAY</span>`
           : '';
 
+        let keyPlayTitle = `Chunk #${idx} (${start.toFixed(0)}s - ${end.toFixed(0)}s)`;
+        if (hasKeyPlay) {
+          const firstKp = meta.sports_key_plays[0];
+          let kpDesc = '';
+          if (typeof firstKp === 'string') kpDesc = firstKp;
+          else if (typeof firstKp === 'object' && firstKp) kpDesc = firstKp.play_description || firstKp.description || firstKp.play_type || '';
+          if (!kpDesc) kpDesc = meta.sports_play_type || meta.chunk_summary || 'Sports Key Play';
+          keyPlayTitle = `⚡ Key Play: ${escapeHtml(kpDesc)} (${start.toFixed(0)}s - ${end.toFixed(0)}s)`;
+        }
+
         return `
           <button 
             type="button" 
@@ -2608,7 +2750,7 @@
             onclick="seekVideoPlayer(${start})"
             data-has-key-play="${hasKeyPlay ? 'true' : 'false'}"
             class="${baseClasses}"
-            title="${hasKeyPlay ? `⚡ Key Play: ${escapeHtml(String(meta.sports_key_plays[0]))}` : `Chunk #${idx} (${start.toFixed(0)}s - ${end.toFixed(0)}s)`}"
+            title="${keyPlayTitle}"
           >
             ${indexBadge}
             ${timeLabel}
@@ -2652,10 +2794,14 @@
         player.load();
       }
       
-      // Smooth scroll to corresponding chunk card
-      const chunkCard = document.getElementById(`chunkCard_${Math.floor(targetSec / 10)}`);
-      if (chunkCard) {
-        chunkCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Move corresponding chunk card to top visibility (Item 2 from change2.png)
+      const chunkIdx = Math.floor(targetSec / 10);
+      scrollChunkToTopVisibility(chunkIdx);
+
+      // Keep horizontal scrubber centered on the active chunk
+      const scrubberBtn = document.getElementById(`scrubberBlock_${chunkIdx}`);
+      if (scrubberBtn) {
+        scrubberBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       }
     }
 
@@ -2842,9 +2988,11 @@
           </div>
         ` : '';
 
-        // Sports Key Plays Prominent Highlight Section
+        // Sports Key Plays Prominent Highlight Section (Item 3 from change2.png)
         const hasKeyPlays = meta.sports_key_plays && Array.isArray(meta.sports_key_plays) && meta.sports_key_plays.length > 0;
         let sportsPlaysHtml = '';
+        let isSummaryIncludedInKeyPlays = false;
+
         if (hasKeyPlays) {
           sportsPlaysHtml = `
             <div class="bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-slate-950/90 border-2 border-amber-500/80 rounded-xl p-4 space-y-2.5 shadow-lg shadow-amber-950/40">
@@ -2858,12 +3006,45 @@
                 </span>
               </div>
               <div class="space-y-1.5 pt-0.5">
-                ${meta.sports_key_plays.map(play => {
-                  const playText = typeof play === 'string' ? play : (play.play_description || play.description || play.name || JSON.stringify(play));
+                ${meta.sports_key_plays.map((play, playIdx) => {
+                  let desc = '';
+                  if (typeof play === 'string' && play.trim()) {
+                    desc = play.trim();
+                  } else if (typeof play === 'object' && play !== null) {
+                    desc = play.play_description || play.description || play.summary || play.name || '';
+                  }
+
+                  // If empty object or no description on play, fallback to chunk_summary or scene_description
+                  if (!desc) {
+                    desc = meta.chunk_summary || meta.scene_description || meta.sports_play_type || 'Key sports play sequence detected.';
+                    if (desc === meta.chunk_summary) {
+                      isSummaryIncludedInKeyPlays = true;
+                    }
+                  }
+
+                  const playType = (typeof play === 'object' && play && play.play_type) || meta.sports_play_type || '';
+                  const score = (typeof play === 'object' && play && play.significance_score) || meta.significance_score;
+
+                  let playTypeTag = '';
+                  if (playType) {
+                    playTypeTag = `<span class="text-amber-400 font-bold uppercase tracking-wider text-[10px] bg-amber-400/20 border border-amber-400/30 px-1.5 py-0.5 rounded mr-1.5">${escapeHtml(playType)}</span>`;
+                  }
+
+                  let scoreTag = '';
+                  if (typeof score === 'number') {
+                    scoreTag = `<span class="text-amber-300/80 font-mono text-[10px] ml-1.5">(Impact: ${(score * 100).toFixed(0)}%)</span>`;
+                  }
+
                   return `
                     <div class="flex items-start space-x-2.5 bg-amber-950/50 border border-amber-500/30 rounded-lg p-2.5 text-xs text-amber-100 font-medium">
                       <span class="text-amber-400 font-bold select-none text-sm mt-0.5">▶</span>
-                      <span class="leading-relaxed font-sans">${escapeHtml(playText)}</span>
+                      <span class="leading-relaxed font-sans text-amber-50">
+                        <span class="font-mono text-amber-400 font-bold">{ </span>
+                        ${playTypeTag}
+                        <span class="text-slate-100">${escapeHtml(desc)}</span>
+                        ${scoreTag}
+                        <span class="font-mono text-amber-400 font-bold"> }</span>
+                      </span>
                     </div>
                   `;
                 }).join('')}
@@ -2887,7 +3068,7 @@
           <div 
             id="chunkCard_${idx}" 
             data-has-key-play="${hasKeyPlays ? 'true' : 'false'}"
-            class="chunk-card ${hasKeyPlays ? 'bg-gradient-to-br from-amber-950/20 via-slate-900 to-slate-900 border-2 border-amber-500/70 shadow-lg shadow-amber-950/30' : 'bg-slate-900 border border-slate-800'} rounded-2xl p-5 space-y-4 transition-all shadow-md"
+            class="chunk-card scroll-mt-[130px] ${hasKeyPlays ? 'bg-gradient-to-br from-amber-950/20 via-slate-900 to-slate-900 border-2 border-amber-500/70 shadow-lg shadow-amber-950/30' : 'bg-slate-900 border border-slate-800'} rounded-2xl p-5 space-y-4 transition-all shadow-md"
           >
             <!-- Chunk Header -->
             <div class="flex items-center justify-between">
@@ -2921,7 +3102,7 @@
             ${sportsPlaysHtml}
 
             <!-- Chunk Summary -->
-            ${meta.chunk_summary ? `<p class="text-xs font-medium text-slate-300 leading-relaxed">${escapeHtml(meta.chunk_summary)}</p>` : ''}
+            ${(meta.chunk_summary && !isSummaryIncludedInKeyPlays) ? `<p class="text-xs font-medium text-slate-300 leading-relaxed">${escapeHtml(meta.chunk_summary)}</p>` : ''}
 
             <!-- Rich Metadata Sections -->
             ${sceneHtml}
