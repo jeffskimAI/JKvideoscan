@@ -71,7 +71,7 @@
           <p class="text-sm text-slate-400">Enter the system password to access the AI video intelligence portal and Firestore metadata library.</p>
         </div>
 
-        <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+        <form id="authForm" onsubmit="handleAuthSubmit(event); return false;" action="javascript:void(0);" method="POST" class="space-y-4">
           <!-- Error banner -->
           <div id="authErrorBanner" class="hidden p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center space-x-2">
             <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1014,9 +1014,9 @@
     }
 
     async function handleAuthSubmit(e) {
-      e.preventDefault();
+      if (e && e.preventDefault) e.preventDefault();
       const pwdInput = document.getElementById('authPasswordInput');
-      const password = pwdInput.value;
+      const password = pwdInput ? pwdInput.value.trim() : '';
       const submitBtn = document.getElementById('authSubmitBtn');
       const errorBanner = document.getElementById('authErrorBanner');
       const errorText = document.getElementById('authErrorText');
@@ -1042,7 +1042,11 @@
           const data = await res.json();
           setAuthToken(data.token);
           hideAuthGate();
-          await initApp();
+          try {
+            await initApp();
+          } catch (initErr) {
+            console.error('App init error (non-fatal):', initErr);
+          }
         } else {
           const err = await res.json();
           errorText.textContent = err.detail || 'Incorrect password. Access denied.';
@@ -1458,12 +1462,6 @@
         return;
       }
 
-      // Check configuration
-      let configJsonStr = null;
-      if (configMode === 'builder') {
-        if (selectedMetadataKeys.size === 0) {
-          alert('Please select at least one metadata attribute in the builder.');
-          return;
       // Check configuration
       let targetMetadataArray = null;
       let configDict = null;

@@ -58,6 +58,11 @@ def test_auth_login_and_verification(unauth_client):
     assert res_login.status_code == 200
     login_data = res_login.json()
     assert login_data["success"] is True
+
+    # 3b. Login with whitespace and mixed casing also succeeds
+    res_case = unauth_client.post("/api/auth/login", json={"password": " JoanIsAwful "})
+    assert res_case.status_code == 200
+    assert res_case.json()["success"] is True
     assert "token" in login_data
     assert "videoscan_auth_token" in res_login.cookies
 

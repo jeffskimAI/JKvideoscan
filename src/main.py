@@ -52,6 +52,19 @@ def get_auth_token() -> str:
     return hashlib.sha256(f"{settings.app_password}:{settings.auth_secret_key}".encode("utf-8")).hexdigest()
 
 
+def _matches_password(candidate: str) -> bool:
+    """Safely checks if candidate password matches app_password (handling whitespace/casing)."""
+    if not candidate:
+        return False
+    c = candidate.strip()
+    expected = settings.app_password.strip()
+    return (
+        hmac.compare_digest(candidate, settings.app_password)
+        or hmac.compare_digest(c, expected)
+        or hmac.compare_digest(c.lower(), expected.lower())
+    )
+
+
 def is_authenticated(request: Request) -> bool:
     """Checks whether the request presents a valid authorization credential."""
     expected_token = get_auth_token()
@@ -70,7 +83,7 @@ def is_authenticated(request: Request) -> bool:
 
     # 3. Direct header 'X-App-Password'
     pwd_header = request.headers.get("x-app-password")
-    if pwd_header and hmac.compare_digest(pwd_header, settings.app_password):
+    if pwd_header and _matches_password(pwd_header):
         return True
 
     # 4. Query parameter 'token' (vital for HTML5 <video> elements)
@@ -80,7 +93,7 @@ def is_authenticated(request: Request) -> bool:
 
     # 5. Query parameter 'password'
     query_pwd = request.query_params.get("password")
-    if query_pwd and hmac.compare_digest(query_pwd, settings.app_password):
+    if query_pwd and _matches_password(query_pwd):
         return True
 
     return False
@@ -102,7 +115,7 @@ def require_auth(request: Request):
 @app.post("/api/auth/login")
 async def auth_login(payload: LoginPayload, response: Response):
     """Validates the application password and creates an authenticated session."""
-    if not hmac.compare_digest(payload.password, settings.app_password):
+    if not _matches_password(payload.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password. Access denied.",
