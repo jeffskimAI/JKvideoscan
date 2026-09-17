@@ -529,3 +529,45 @@ def test_api_upload_complete_missing_blob(client):
         orchestrator.storage_manager = orig_storage
 
 
+def test_api_stop_video(client):
+    """Test stopping processing for a single video."""
+    mock_repo = MagicMock()
+    mock_repo.get_video_record.return_value = {"video_id": "vid_to_stop", "status": "PROCESSING"}
+    mock_repo.stop_video_processing.return_value = True
+
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.firestore_repo = mock_repo
+        res = client.post("/api/videos/vid_to_stop/stop")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "STOPPED"
+        assert data["video_id"] == "vid_to_stop"
+        mock_repo.stop_video_processing.assert_called_once_with("vid_to_stop", "Processing stopped by user request.")
+    finally:
+        orchestrator.firestore_repo = orig_repo
+
+
+def test_api_stop_all_videos(client):
+    """Test stopping processing for all active videos."""
+    mock_repo = MagicMock()
+    mock_repo.list_videos.return_value = [
+        {"video_id": "vid1", "status": "PROCESSING"},
+        {"video_id": "vid2", "status": "COMPLETED"},
+        {"video_id": "vid3", "status": "PROCESSING"},
+    ]
+    mock_repo.stop_video_processing.return_value = True
+
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.firestore_repo = mock_repo
+        res = client.post("/api/videos/stop-all")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["stopped_count"] == 2
+        assert set(data["stopped_video_ids"]) == {"vid1", "vid3"}
+    finally:
+        orchestrator.firestore_repo = orig_repo
+
+
+

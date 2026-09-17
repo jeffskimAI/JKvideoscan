@@ -169,6 +169,22 @@ class FirestoreRepository:
         doc_ref.set(update_data, merge=True)
         logger.warning(f"Marked video={video_id} as FAILED: {error_message}")
 
+    def stop_video_processing(
+        self,
+        video_id: str,
+        reason: str = "Processing stopped by user request.",
+    ) -> None:
+        """Marks video processing status as 'STOPPED'."""
+        now = self._now_iso()
+        doc_ref = self.client.collection(self.collection_name).document(video_id)
+        doc_ref.set({
+            "status": "STOPPED",
+            "error_message": reason,
+            "error_description": reason,
+            "updated_at": now,
+        }, merge=True)
+        logger.info(f"Marked video={video_id} as STOPPED: {reason}")
+
     def get_video_logs(self, video_id: str) -> List[Dict[str, Any]]:
         """Retrieves execution logs recorded for a video."""
         rec = self.get_video_record(video_id)

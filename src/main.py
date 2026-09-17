@@ -677,6 +677,43 @@ async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks)
     return {"status": "TRIGGERED", "video_id": video_id}
 
 
+@app.post("/api/videos/stop-all", dependencies=[Depends(require_auth)])
+async def stop_all_processes():
+    """Stops all currently running or queued video processing pipelines."""
+    videos = orchestrator.firestore_repo.list_videos(limit=200)
+    stopped_count = 0
+    stopped_ids = []
+    for v in videos:
+        vid = v.get("video_id")
+        if v.get("status") == "PROCESSING" and vid:
+            orchestrator.firestore_repo.stop_video_processing(vid, "Processing stopped by user request.")
+            stopped_count += 1
+            stopped_ids.append(vid)
+
+    logger.info(f"Stop-all requested: stopped {stopped_count} videos ({stopped_ids})")
+    return {
+        "status": "success",
+        "stopped_count": stopped_count,
+        "stopped_video_ids": stopped_ids,
+        "message": f"Successfully stopped {stopped_count} active processes.",
+    }
+
+
+@app.post("/api/videos/{video_id}/stop", dependencies=[Depends(require_auth)])
+async def stop_single_video_process(video_id: str):
+    """Stops processing for a specific video."""
+    record = orchestrator.firestore_repo.get_video_record(video_id)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Video {video_id} not found.")
+
+    orchestrator.firestore_repo.stop_video_processing(video_id, "Processing stopped by user request.")
+    return {
+        "status": "STOPPED",
+        "video_id": video_id,
+        "message": f"Processing stopped for {video_id}.",
+    }
+
+
 @app.delete("/api/videos/{video_id}", dependencies=[Depends(require_auth)])
 async def delete_video(video_id: str):
     """Deletes video document and chunks from Firestore."""

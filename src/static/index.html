@@ -610,6 +610,20 @@
             </svg>
           </div>
 
+          <!-- Stop All Button -->
+          <button 
+            type="button" 
+            id="btnStopAllProcesses" 
+            onclick="stopAllProcessing()" 
+            class="px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-xs font-semibold text-rose-300 flex items-center space-x-1.5 transition-colors"
+            title="Stop all active video processing pipelines"
+          >
+            <svg class="w-3.5 h-3.5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+            <span>Stop All</span>
+          </button>
+
           <!-- Refresh Button -->
           <button 
             type="button" 
@@ -715,6 +729,18 @@
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
               <span>Reprocess</span>
+            </button>
+            <button 
+              type="button" 
+              id="btnInspectorStop"
+              onclick="stopVideoProcessing()" 
+              class="hidden px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-xs font-semibold text-rose-300 flex items-center space-x-1.5 transition-colors"
+              title="Stop processing this video"
+            >
+              <svg class="w-3.5 h-3.5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="1"></rect>
+              </svg>
+              <span>Stop</span>
             </button>
             <button 
               type="button" 
@@ -1877,12 +1903,14 @@
       }
 
       grid.innerHTML = videos.map(v => {
-        const status = v.status || 'UNKNOWN';
+        const status = (v.status || 'UNKNOWN').toUpperCase();
         let statusBadge = '';
         if (status === 'COMPLETED') {
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span></span>';
         } else if (status === 'PROCESSING') {
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span></span>';
+        } else if (status === 'STOPPED' || status === 'CANCELLED') {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span></span>';
         } else {
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span></span>';
         }
@@ -1918,15 +1946,41 @@
               </p>
             </div>
           `;
+        } else if (status === 'STOPPED' || status === 'CANCELLED') {
+          const reason = v.error_description || v.error_message || 'Video processing was stopped.';
+          failureBox = `
+            <div class="p-2.5 bg-slate-800/50 border border-slate-700/80 rounded-xl space-y-1 text-xs">
+              <div class="flex items-center space-x-1.5 text-slate-300 font-semibold text-[11px]">
+                <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Processing Stopped</span>
+              </div>
+              <p class="text-slate-400 text-[11px] leading-relaxed line-clamp-2" title="${escapeHtml(reason)}">
+                ${escapeHtml(reason)}
+              </p>
+            </div>
+          `;
         }
 
         const actionBtnClass = status === 'FAILED'
           ? 'bg-rose-950/50 hover:bg-rose-900/80 text-rose-300 hover:text-white border-rose-800/60'
-          : 'bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/30';
-        const actionBtnLabel = status === 'FAILED' ? 'Inspect Failure & Logs' : 'Inspect Metadata';
+          : (status === 'STOPPED' || status === 'CANCELLED'
+            ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+            : 'bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/30');
+        const actionBtnLabel = status === 'FAILED' 
+          ? 'Inspect Failure & Logs' 
+          : (status === 'STOPPED' || status === 'CANCELLED' ? 'Inspect Details' : 'Inspect Metadata');
+
+        const cardBorderClass = status === 'FAILED'
+          ? 'border-rose-900/50 hover:border-rose-500/60'
+          : (status === 'STOPPED' || status === 'CANCELLED'
+            ? 'border-slate-800 hover:border-slate-600'
+            : 'border-slate-800 hover:border-indigo-500/60');
 
         return `
-          <div class="video-card bg-slate-900 border ${status === 'FAILED' ? 'border-rose-900/50 hover:border-rose-500/60' : 'border-slate-800 hover:border-indigo-500/60'} rounded-2xl p-5 space-y-4 transition-all group flex flex-col justify-between shadow-lg shadow-black/20" data-id="${escapeHtml(v.video_id)}" data-filename="${escapeHtml(v.filename || '')}">
+          <div class="video-card bg-slate-900 border ${cardBorderClass} rounded-2xl p-5 space-y-4 transition-all group flex flex-col justify-between shadow-lg shadow-black/20" data-id="${escapeHtml(v.video_id)}" data-filename="${escapeHtml(v.filename || '')}">
             <div class="space-y-3">
               <div class="flex items-start justify-between gap-2">
                 <div>
@@ -1959,15 +2013,30 @@
 
             <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
               <span class="text-[10px] text-slate-500">${escapeHtml((v.created_at || '').substring(0, 10))}</span>
-              <button 
-                onclick="openVideoInspector('${escapeHtml(v.video_id)}')" 
-                class="px-3 py-1.5 rounded-lg ${actionBtnClass} border text-xs font-semibold transition-all flex items-center space-x-1"
-              >
-                <span>${actionBtnLabel}</span>
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
+              <div class="flex items-center space-x-2">
+                ${status === 'PROCESSING' ? `
+                  <button 
+                    type="button" 
+                    onclick="event.stopPropagation(); stopVideoProcessing('${escapeHtml(v.video_id)}')" 
+                    class="px-2.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-semibold transition-all flex items-center space-x-1"
+                    title="Stop this video's processing"
+                  >
+                    <svg class="w-3 h-3 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="6" y="6" width="12" height="12" rx="1"></rect>
+                    </svg>
+                    <span>Stop</span>
+                  </button>
+                ` : ''}
+                <button 
+                  onclick="openVideoInspector('${escapeHtml(v.video_id)}')" 
+                  class="px-3 py-1.5 rounded-lg ${actionBtnClass} border text-xs font-semibold transition-all flex items-center space-x-1"
+                >
+                  <span>${actionBtnLabel}</span>
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -1998,15 +2067,28 @@
 
       // Status badge: exactly match the Firestore library badge appearance and text
       const badge = document.getElementById('inspectorStatusBadge');
-      if (status === 'COMPLETED') {
+      const st = (status || '').toUpperCase();
+      if (st === 'COMPLETED') {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
-      } else if (status === 'PROCESSING') {
+      } else if (st === 'PROCESSING') {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
+      } else if (st === 'STOPPED' || st === 'CANCELLED') {
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-xs font-semibold flex items-center space-x-1';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span>';
       } else {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
+      }
+
+      const stopBtn = document.getElementById('btnInspectorStop');
+      if (stopBtn) {
+        if (st === 'PROCESSING') {
+          stopBtn.classList.remove('hidden');
+        } else {
+          stopBtn.classList.add('hidden');
+        }
       }
 
       // Metadata Header Info
@@ -2137,15 +2219,28 @@
 
         // Status badge: match Firestore library
         const badge = document.getElementById('inspectorStatusBadge');
-        if (v.status === 'COMPLETED') {
+        const st = (v.status || '').toUpperCase();
+        if (st === 'COMPLETED') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
-        } else if (v.status === 'PROCESSING') {
+        } else if (st === 'PROCESSING') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
+        } else if (st === 'STOPPED' || st === 'CANCELLED') {
+          badge.className = 'px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-xs font-semibold flex items-center space-x-1';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span>';
         } else {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
+        }
+
+        const stopBtn = document.getElementById('btnInspectorStop');
+        if (stopBtn) {
+          if (st === 'PROCESSING') {
+            stopBtn.classList.remove('hidden');
+          } else {
+            stopBtn.classList.add('hidden');
+          }
         }
 
         // Target Metadata Tags
@@ -2261,14 +2356,17 @@
       const container = document.getElementById('chunksMetadataCardsList');
       const v = videoRecord || (activeVideoData && activeVideoData.video) || {};
       const isFailed = (v.status || '').toUpperCase() === 'FAILED';
+      const isStopped = (v.status || '').toUpperCase() === 'STOPPED' || (v.status || '').toUpperCase() === 'CANCELLED';
 
       let failureHtml = '';
       if (isFailed) {
         failureHtml = renderFailureDiagnosticsCard(v);
+      } else if (isStopped) {
+        failureHtml = renderStoppedDiagnosticsCard(v);
       }
 
       if (!chunks || chunks.length === 0) {
-        if (isFailed) {
+        if (isFailed || isStopped) {
           container.innerHTML = failureHtml;
           return;
         }
@@ -2288,12 +2386,12 @@
       }
 
       let partialNoticeHtml = '';
-      if (isFailed) {
+      if (isFailed || isStopped) {
         partialNoticeHtml = `
           <div class="pt-4 border-t border-slate-800/80">
-            <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-2 mb-3">
-              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>Partial Chunks Extracted Before Failure (${chunks.length})</span>
+            <h4 class="text-xs font-bold ${isFailed ? 'text-amber-400' : 'text-slate-300'} uppercase tracking-wider flex items-center space-x-2 mb-3">
+              <span class="w-2 h-2 rounded-full ${isFailed ? 'bg-amber-400' : 'bg-slate-400'}"></span>
+              <span>Partial Chunks Extracted (${chunks.length})</span>
             </h4>
           </div>
         `;
@@ -2559,6 +2657,46 @@
       `;
     }
 
+    // Render Stopped Status Card inside Inspector
+    function renderStoppedDiagnosticsCard(v) {
+      const videoId = v.video_id || currentVideoId || 'unknown';
+      const errMsg = v.error_description || v.error_message || 'Video processing was stopped by user request.';
+      return `
+        <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 space-y-4 shadow-xl">
+          <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Pipeline Stopped</h3>
+                <p class="text-xs text-slate-400">Processing for this video was stopped by user request.</p>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              onclick="reprocessCurrentVideo()" 
+              class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>Restart Processing</span>
+            </button>
+          </div>
+          <div class="p-3.5 bg-slate-950/70 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1">
+            <span class="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Status Detail:</span>
+            <p>${escapeHtml(errMsg)}</p>
+          </div>
+        </div>
+      `;
+    }
+
     // Render formatted list of structured log entries
     function renderLogsListHtml(logs) {
       if (!logs || logs.length === 0) {
@@ -2792,6 +2930,51 @@
         } else {
           const err = await res.json();
           alert('Failed to trigger reprocessing: ' + (err.detail || err.error));
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    // Stop all active video processing pipelines
+    async function stopAllProcessing() {
+      if (!confirm('Are you sure you want to stop all active video processing pipelines?')) return;
+      try {
+        const res = await apiFetch('/api/videos/stop-all', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          alert(data.message || 'All active processes stopped.');
+          await fetchVideosList(true);
+          if (currentVideoId) {
+            await loadVideoMetadata(currentVideoId);
+          }
+        } else {
+          const err = await res.json();
+          alert('Failed to stop processes: ' + (err.detail || err.error));
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    // Stop processing for a specific video
+    async function stopVideoProcessing(videoId = null) {
+      const vid = videoId || (activeVideoData && activeVideoData.video && activeVideoData.video.video_id) || currentVideoId;
+      if (!vid) {
+        alert('No video selected.');
+        return;
+      }
+      if (!confirm(`Stop processing video "${vid}"?`)) return;
+      try {
+        const res = await apiFetch(`/api/videos/${encodeURIComponent(vid)}/stop`, { method: 'POST' });
+        if (res.ok) {
+          await fetchVideosList(true);
+          if (currentVideoId === vid) {
+            await loadVideoMetadata(vid);
+          }
+        } else {
+          const err = await res.json();
+          alert('Failed to stop processing: ' + (err.detail || err.error));
         }
       } catch (e) {
         alert('Error: ' + e.message);

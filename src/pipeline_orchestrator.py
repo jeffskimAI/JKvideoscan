@@ -158,6 +158,19 @@ class PipelineOrchestrator:
             current_stage = "gemini_extraction"
             log_step("INFO", f"Beginning Gemini metadata extraction across {len(chunks)} chunks with model={self.gemini_extractor.model_name}...", current_stage)
             for idx, chunk in enumerate(chunks):
+                # Check if processing was stopped by user
+                current_rec = self.firestore_repo.get_video_record(video_id)
+                if current_rec and current_rec.get("status") in ("STOPPED", "CANCELLED"):
+                    log_step("WARNING", f"Pipeline halted by user request at chunk {idx + 1}/{len(chunks)}", current_stage)
+                    logger.warning(f"Aborting pipeline for {video_id}: status={current_rec.get('status')}")
+                    return {
+                        "status": current_rec.get("status"),
+                        "video_id": video_id,
+                        "processed_chunks": idx,
+                        "total_chunks": len(chunks),
+                        "logs": pipeline_logs,
+                    }
+
                 log_step("INFO", f"Extracting chunk {chunk.index + 1}/{len(chunks)} ({chunk.start_time_seconds:.1f}s - {chunk.end_time_seconds:.1f}s)...", current_stage)
                 chunk_metadata = self.gemini_extractor.extract_chunk_metadata(
                     chunk=chunk,
