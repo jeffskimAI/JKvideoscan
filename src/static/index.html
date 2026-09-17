@@ -143,11 +143,11 @@
 
   <!-- TOP NAVIGATION HEADER -->
   <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
       
-      <!-- Brand Logo -->
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-indigo-500/20">
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center space-x-3 flex-shrink-0">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-indigo-500/20 flex-shrink-0">
           <div class="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center">
             <svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="23 7 16 12 23 17 23 7"></polygon>
@@ -156,28 +156,13 @@
             </svg>
           </div>
         </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">Jeff's VideoScan</span>
-            <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Production</span>
-          </div>
-          <p class="text-xs text-slate-400">Vertex AI Gemini 3.8 &middot; Strict 10s Chunking Pipeline</p>
-        </div>
-      </div>
-
-      <!-- System Environment Badges -->
-      <div class="hidden md:flex items-center space-x-3 text-xs">
-        <div class="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 flex items-center space-x-1.5 text-slate-300">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
-          <span class="text-slate-400">GCP:</span>
-          <span class="font-mono text-emerald-400 font-medium" id="headerGcpProject">loading...</span>
-        </div>
-        <div class="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 flex items-center space-x-1.5 text-slate-300">
-          <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-          </svg>
-          <span class="text-slate-400">Bucket:</span>
-          <span class="font-mono text-amber-300 font-medium" id="headerBucket">loading...</span>
+        <div class="flex flex-col justify-center">
+          <span class="text-lg sm:text-xl font-bold tracking-tight text-white whitespace-nowrap leading-tight">
+            Jeff's VideoScan
+          </span>
+          <p class="text-[11px] text-slate-400 whitespace-nowrap leading-tight mt-0.5">
+            Vertex AI Gemini 3.8 &middot; Strict 10s Chunking Pipeline
+          </p>
         </div>
       </div>
 
@@ -252,14 +237,38 @@
     <section id="tabUploadSection" class="space-y-8">
       
       <!-- Banner -->
-      <div class="bg-gradient-to-r from-indigo-900/40 via-purple-900/20 to-slate-900 border border-indigo-800/40 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-        <div class="relative z-10 max-w-3xl">
+      <div class="bg-gradient-to-r from-indigo-900/40 via-purple-900/20 to-slate-900 border border-indigo-800/40 rounded-2xl p-6 sm:p-8 relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div class="relative z-10 max-w-2xl">
           <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
             Upload Video & Configure Extraction Pipeline
           </h1>
           <p class="text-slate-300 text-sm sm:text-base leading-relaxed">
             Upload any video file alongside a configuration file to Google Cloud Storage. The serverless pipeline segments the video into exact 10-second chunks using FFmpeg, extracts multimodal insights via Gemini 3.8, and writes structured metadata directly into Cloud Firestore.
           </p>
+        </div>
+
+        <!-- System Environment & Storage Badges (Moved from header) -->
+        <div class="relative z-10 flex-shrink-0 flex flex-col sm:flex-row lg:flex-col gap-2.5 bg-slate-950/70 border border-indigo-500/20 rounded-xl p-3.5 backdrop-blur-md shadow-lg shadow-black/30 min-w-[280px]">
+          <div class="flex items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+            <span class="text-[11px] font-semibold tracking-wider uppercase text-slate-400">Environment</span>
+            <span class="text-[10px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-500/10">
+              Production
+            </span>
+          </div>
+          <div class="flex flex-col sm:flex-row lg:flex-col gap-2 text-xs">
+            <div class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center space-x-2 text-slate-300">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot flex-shrink-0"></span>
+              <span class="text-slate-400">GCP:</span>
+              <span class="font-mono text-emerald-400 font-semibold" id="heroGcpProject">jeffskim999</span>
+            </div>
+            <div class="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center space-x-2 text-slate-300">
+              <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              </svg>
+              <span class="text-slate-400">Bucket:</span>
+              <span class="font-mono text-amber-300 font-semibold" id="heroBucket">jeffsvideoscan-ingest</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1155,8 +1164,16 @@
         const res = await apiFetch('/api/info');
         if (res.ok) {
           appInfo = await res.json();
-          document.getElementById('headerGcpProject').textContent = appInfo.gcp_project || 'jeffskim999';
-          document.getElementById('headerBucket').textContent = appInfo.gcs_bucket || 'jeffsvideoscan-ingest';
+          const gcpProj = appInfo.gcp_project || 'jeffskim999';
+          const gcsBucket = appInfo.gcs_bucket || 'jeffsvideoscan-ingest';
+          ['heroGcpProject', 'headerGcpProject'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = gcpProj;
+          });
+          ['heroBucket', 'headerBucket'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = gcsBucket;
+          });
         }
       } catch (e) {
         console.error('Failed to load app info:', e);
