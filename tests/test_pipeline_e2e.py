@@ -178,3 +178,73 @@ def test_pipeline_awaiting_pair(test_client):
     assert res_data["status"] == "AWAITING_PAIR"
     assert res_data["video_id"] == "unpaired_vid"
     assert res_data["missing_file"] == "unpaired_vid_config.json"
+
+
+def test_pipeline_resumability_skips_existing_chunks(tmp_path: Path):
+    """Test that chunks already saved in Firestore are skipped during execution."""
+    sample_video = tmp_path / "resume_test.mp4"
+    create_synthetic_video(sample_video, duration_sec=22.0, with_audio=False)
+
+    config_content = {"target_metadata": ["scene_description"]}
+
+    mock_storage = MagicMock()
+    mock_storage.download_blob_to_file.side_effect = lambda b, o, d: d.write_bytes(sample_video.read_bytes())
+    mock_storage.download_json_as_dict.return_value = config_content
+
+    mock_db = MockFirestoreClient()
+    from src.firestore_repo import FirestoreRepository
+    firestore_repo = FirestoreRepository(client=mock_db, collection_name="videos")
+
+    # Pre-populate chunk 0 in Firestore
+    chunk_0 = VideoChunk(
+        index=0,
+        start_time_seconds=0.0,
+        end_time_seconds=10.0,
+        duration_seconds=10.0,
+        file_path=sample_video,
+    )
+    firestore_repo.save_chunk_metadata(
+        video_id="resume_test",
+        chunk=chunk_0,
+        extracted_metadata={"scene_description": "Pre-existing chunk 0 description"},
+        model_version="gemini-3.8-flash",
+    )
+
+    from src.gemini_extractor import GeminiExtractor
+    mock_gemini = MagicMock(spec=GeminiExtractor)
+    mock_gemini.model_name = "gemini-3.8-flash"
+
+    extracted_indices = []
+
+    def fake_extract(chunk: VideoChunk, target_keys: list):
+        extracted_indices.append(chunk.index)
+        return {"scene_description": f"Extracted chunk {chunk.index}"}
+
+    mock_gemini.extract_chunk_metadata.side_effect = fake_extract
+
+    from src.pipeline_orchestrator import PipelineOrchestrator
+    custom_orch = PipelineOrchestrator(
+        storage_manager=mock_storage,
+        firestore_repo=firestore_repo,
+        gemini_extractor=mock_gemini,
+        temp_dir=str(tmp_path / "scratch"),
+    )
+
+    result = custom_orch.execute_video_pipeline(
+        bucket_name="test-bucket",
+        video_id="resume_test",
+        video_object="resume_test.mp4",
+        config_object="resume_test_config.json",
+        force=True,
+    )
+
+    assert result["status"] == "COMPLETED"
+    # Chunk 0 was pre-existing, so fake_extract should only be called for chunks 1 and 2!
+    assert sorted(extracted_indices) == [1, 2]
+
+    # Verify all 3 chunks are present in Firestore
+    chunks = firestore_repo.get_video_chunks("resume_test")
+    assert len(chunks) == 3
+    assert chunks[0]["extracted_metadata"]["scene_description"] == "Pre-existing chunk 0 description"
+    assert chunks[1]["extracted_metadata"]["scene_description"] == "Extracted chunk 1"
+    assert chunks[2]["extracted_metadata"]["scene_description"] == "Extracted chunk 2"

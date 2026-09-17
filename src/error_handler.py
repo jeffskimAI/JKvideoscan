@@ -51,7 +51,7 @@ def describe_error(
         description = (
             "The configuration file is missing, improperly formatted, or contains unsupported metadata keys. "
             "Ensure that 'target_metadata' is a valid JSON array of supported attributes from the "
-            "Metadata Extractor Dictionary (e.g. 'scene_description', 'detected_objects', 'overall_sentiment')."
+            "Metadata Config Dictionary (e.g. 'scene_description', 'detected_objects', 'overall_sentiment')."
         )
         if isinstance(exception, CatalogValidationError) or "unsupported" in err_msg_lower or "catalog" in err_msg_lower:
             description += f" Specific catalog issue: {err_msg}"

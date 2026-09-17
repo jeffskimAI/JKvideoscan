@@ -16,6 +16,27 @@ class MockFirestoreClient:
     def collection(self, col_name: str):
         return MockCollectionRef(self.store, [col_name])
 
+    def collection_group(self, group_name: str):
+        # find all documents under any subcollection named group_name
+        snapshots = []
+        for col_k, col_v in self.store.items():
+            if isinstance(col_v, dict):
+                for doc_id, doc_dict in col_v.items():
+                    if isinstance(doc_dict, dict) and group_name in doc_dict:
+                        subcol = doc_dict[group_name]
+                        if isinstance(subcol, dict):
+                            for sub_id, sub_data in subcol.items():
+                                if isinstance(sub_data, dict) and "_data" in sub_data:
+                                    mock_snap = MagicMock()
+                                    mock_snap.to_dict.return_value = sub_data["_data"]
+                                    mock_ref = MagicMock()
+                                    mock_ref.parent.parent.id = doc_id
+                                    mock_snap.reference = mock_ref
+                                    snapshots.append(mock_snap)
+        mock_cg = MagicMock()
+        mock_cg.stream.return_value = snapshots
+        return mock_cg
+
 
 class MockCollectionRef:
     def __init__(self, store: dict, path: list):
@@ -179,3 +200,84 @@ def test_firestore_repo_failure():
     rec = repo.get_video_record("err_vid")
     assert rec["status"] == "FAILED"
     assert "FFmpeg failed" in rec["error_message"]
+
+
+def test_firestore_repo_search_chunks():
+    """Test searching chunks by key, query, and sports_key_plays."""
+    mock_client = MockFirestoreClient()
+    repo = FirestoreRepository(client=mock_client, collection_name="videos")
+
+    # Seed video 1: soccer
+    repo.init_video_record(
+        video_id="soccer_vid",
+        filename="soccer.mp4",
+        gcs_bucket="b",
+        gcs_path="soccer.mp4",
+        config_path="soccer_config.json",
+        target_metadata=["sports_key_plays", "sports_play_type", "detected_objects", "transcript"],
+        total_chunks=3,
+        duration_seconds=30.0,
+    )
+    chunk0 = VideoChunk(index=0, start_time_seconds=0.0, end_time_seconds=10.0, duration_seconds=10.0, file_path=Path("/tmp/c0.mp4"))
+    repo.save_chunk_metadata("soccer_vid", chunk0, {
+        "sports_play_type": "soccer_kickoff",
+        "significance_score": 0.5,
+        "significance_factors": ["Match start"],
+        "detected_objects": ["soccer ball", "referee", "players"],
+        "transcript": "The whistle blows to start the match",
+    }, model_version="gemini-3.8")
+    chunk1 = VideoChunk(index=1, start_time_seconds=10.0, end_time_seconds=20.0, duration_seconds=10.0, file_path=Path("/tmp/c1.mp4"))
+    repo.save_chunk_metadata("soccer_vid", chunk1, {
+        "sports_play_type": "soccer_goal",
+        "significance_score": 0.99,
+        "significance_factors": ["Upper corner strike", "Crowd eruption"],
+        "sports_key_plays": [{"play_type": "soccer_goal", "score": "1-0"}],
+        "detected_objects": ["soccer ball", "net", "goalkeeper"],
+        "transcript": "What a magnificent goal by Ronaldo!",
+    }, model_version="gemini-3.8")
+
+    # Seed video 2: nature
+    repo.init_video_record(
+        video_id="nature_vid",
+        filename="nature.mp4",
+        gcs_bucket="b",
+        gcs_path="nature.mp4",
+        config_path="nature_config.json",
+        target_metadata=["scene_description", "detected_objects"],
+        total_chunks=1,
+        duration_seconds=10.0,
+    )
+    chunk_n = VideoChunk(index=0, start_time_seconds=0.0, end_time_seconds=10.0, duration_seconds=10.0, file_path=Path("/tmp/cn.mp4"))
+    repo.save_chunk_metadata("nature_vid", chunk_n, {
+        "scene_description": "A sunny forest with tall pine trees and deer grazing.",
+        "detected_objects": ["pine tree", "deer", "sunlight"],
+    }, model_version="gemini-3.8")
+
+    # 1. Search by key="sports_key_plays"
+    res_kp = repo.search_chunks(key="sports_key_plays")
+    assert len(res_kp) >= 1
+    goal_res = [r for r in res_kp if r["chunk_index"] == 1][0]
+    assert goal_res["video_id"] == "soccer_vid"
+    assert goal_res["sports_play_type"] == "soccer_goal"
+    assert goal_res["significance_score"] == 0.99
+
+    # 2. Search by key="sports_key_plays" with query="Ronaldo"
+    res_ronaldo = repo.search_chunks(key="sports_key_plays", query="Ronaldo")
+    assert len(res_ronaldo) == 1
+    assert res_ronaldo[0]["chunk_index"] == 1
+
+    # 3. Search by key="detected_objects" with query="deer"
+    res_deer = repo.search_chunks(key="detected_objects", query="deer")
+    assert len(res_deer) == 1
+    assert res_deer[0]["video_id"] == "nature_vid"
+
+    # 4. Search query only across all fields (query="forest")
+    res_forest = repo.search_chunks(query="forest")
+    assert len(res_forest) == 1
+    assert res_forest[0]["video_id"] == "nature_vid"
+
+    # 5. Search with video_id scoping
+    res_scoped = repo.search_chunks(video_id="nature_vid")
+    assert len(res_scoped) == 1
+    assert res_scoped[0]["video_id"] == "nature_vid"
+

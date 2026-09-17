@@ -32,12 +32,18 @@ def test_ui_and_root_html(unauth_client):
     assert "Jeff's VideoScan" in res_root.text
     assert "<!DOCTYPE html>" in res_root.text
     assert "authGate" in res_root.text
+    assert "globalSearchInput" in res_root.text
+    assert "sports_key_plays" in res_root.text
+    assert "searchResultsModal" in res_root.text
 
     # Direct /ui endpoint
     res_ui = unauth_client.get("/ui")
     assert res_ui.status_code == 200
     assert "Jeff's VideoScan" in res_ui.text
     assert "authGate" in res_ui.text
+    assert "globalSearchInput" in res_ui.text
+    assert "sports_key_plays" in res_ui.text
+    assert "searchResultsModal" in res_ui.text
 
 
 def test_auth_login_and_verification(unauth_client):
@@ -604,6 +610,61 @@ def test_api_scan_bucket(client):
     finally:
         orchestrator.storage_manager = orig_storage
         orchestrator.firestore_repo = orig_repo
+
+
+def test_search_metadata_endpoint(client, unauth_client):
+    """Test GET /api/search with authentication, parameters, and results."""
+    # 1. Unauthenticated request rejected
+    res_unauth = unauth_client.get("/api/search?q=goal")
+    assert res_unauth.status_code == 401
+
+    # 2. Authenticated request
+    mock_repo = MagicMock()
+    mock_repo.search_chunks.return_value = [
+        {
+            "video_id": "vid1",
+            "chunk_index": 2,
+            "start_time_seconds": 20.0,
+            "end_time_seconds": 30.0,
+            "matched_key": "sports_key_plays",
+            "matched_value": "Soccer Goal · Score: 0.99",
+            "significance_score": 0.99,
+        }
+    ]
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.firestore_repo = mock_repo
+        res = client.get("/api/search?key=sports_key_plays&q=goal&video_id=vid1")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_results"] == 1
+        assert data["query"] == "goal"
+        assert data["key"] == "sports_key_plays"
+        assert data["video_id"] == "vid1"
+        assert len(data["results"]) == 1
+        assert data["results"][0]["matched_key"] == "sports_key_plays"
+        mock_repo.search_chunks.assert_called_once_with(
+            query="goal",
+            key="sports_key_plays",
+            video_id="vid1",
+            limit=100,
+        )
+    finally:
+        orchestrator.firestore_repo = orig_repo
+
+
+def test_search_keys_endpoint(client):
+    """Test GET /api/search/keys returns catalog keys and categories."""
+    res = client.get("/api/search/keys")
+    assert res.status_code == 200
+    data = res.json()
+    assert "keys" in data
+    assert "categories" in data
+    keys = [item["key"] for item in data["keys"]]
+    assert "sports_key_plays" in keys
+    assert "sports_play_type" in keys
+    assert "scene_description" in keys
+
 
 
 

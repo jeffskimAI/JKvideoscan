@@ -1,0 +1,14 @@
+.gcloudignore
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+*.mp4
+*.png
+tmp/
+chunks/
+logs/
+.env

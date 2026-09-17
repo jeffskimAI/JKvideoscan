@@ -56,36 +56,60 @@ def segment_video(
         f"into {stream_info.total_chunks} chunks of {chunk_duration_sec}s each."
     )
 
-    # 2. Build FFmpeg command
+    # 2. Attempt fast stream copy (-c copy) first without re-encoding
     output_pattern = str(output_dir / "chunk_%04d.mp4")
-    cmd = [
+    copy_cmd = [
         "ffmpeg",
         "-y",
         "-v", "error",
         "-i", str(video_path),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-    ]
-
-    if stream_info.has_audio:
-        cmd.extend(["-c:a", "aac", "-b:a", "128k"])
-    else:
-        cmd.extend(["-an"])
-
-    cmd.extend([
+        "-c", "copy",
         "-f", "segment",
         "-segment_time", str(chunk_duration_sec),
         "-reset_timestamps", "1",
-        "-force_key_frames", f"expr:gte(t,n_forced*{chunk_duration_sec})",
         output_pattern,
-    ])
+    ]
 
+    use_reencode = False
     try:
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        subprocess.run(copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        chunk_files = sorted(output_dir.glob("chunk_*.mp4"))
+        if not chunk_files or (stream_info.total_chunks > 1 and len(chunk_files) < max(2, stream_info.total_chunks // 2)):
+            logger.info("Stream copy produced insufficient keyframe splits; falling back to ultrafast re-encode...")
+            use_reencode = True
+            for f in chunk_files:
+                f.unlink(missing_ok=True)
     except subprocess.CalledProcessError as e:
-        logger.error(f"FFmpeg segmentation failed: {e.stderr}")
-        raise VideoSegmentationError(f"FFmpeg failed: {e.stderr.strip()}") from e
+        logger.info(f"Stream copy failed ({e.stderr.strip()}); falling back to ultrafast re-encode...")
+        use_reencode = True
+
+    if use_reencode:
+        reencode_cmd = [
+            "ffmpeg",
+            "-y",
+            "-v", "error",
+            "-i", str(video_path),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "26",
+        ]
+        if stream_info.has_audio:
+            reencode_cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+        else:
+            reencode_cmd.extend(["-an"])
+
+        reencode_cmd.extend([
+            "-f", "segment",
+            "-segment_time", str(chunk_duration_sec),
+            "-reset_timestamps", "1",
+            "-force_key_frames", f"expr:gte(t,n_forced*{chunk_duration_sec})",
+            output_pattern,
+        ])
+        try:
+            subprocess.run(reencode_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg segmentation failed: {e.stderr}")
+            raise VideoSegmentationError(f"FFmpeg failed: {e.stderr.strip()}") from e
 
     # 3. Collect and validate generated chunks
     chunk_files = sorted(output_dir.glob("chunk_*.mp4"))

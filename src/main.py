@@ -219,6 +219,16 @@ async def list_videos(limit: int = 100):
         bucket = v.get("gcs_bucket") or settings.gcs_bucket
         path = v.get("gcs_path") or f"{v.get('video_id')}.mp4"
         v["gcs_uri"] = f"gs://{bucket}/{path}"
+        st = (v.get("status") or "").upper()
+        if st == "COMPLETED" and "processed_chunks" not in v:
+            v["processed_chunks"] = v.get("total_chunks", 0)
+        elif st == "PROCESSING" and "processed_chunks" not in v:
+            try:
+                col = orchestrator.firestore_repo.client.collection(orchestrator.firestore_repo.collection_name).document(v.get("video_id")).collection("chunks")
+                cnt_res = col.count().get()
+                v["processed_chunks"] = int(cnt_res[0][0].value)
+            except Exception:
+                v["processed_chunks"] = 0
     return {"videos": videos}
 
 
@@ -236,12 +246,65 @@ async def get_video_detail(video_id: str):
     bucket = record.get("gcs_bucket", settings.gcs_bucket)
     path = record.get("gcs_path", f"{video_id}.mp4")
     config_path = record.get("config_path", f"{video_id}_config.json")
+    if "processed_chunks" not in record:
+        record["processed_chunks"] = len(chunks)
 
     return {
         "video": record,
         "chunks": chunks,
         "gcs_uri": f"gs://{bucket}/{path}",
         "config_gcs_uri": f"gs://{bucket}/{config_path}",
+    }
+
+
+@app.get("/api/search", dependencies=[Depends(require_auth)])
+async def search_metadata(
+    q: Optional[str] = None,
+    key: Optional[str] = None,
+    video_id: Optional[str] = None,
+    limit: int = 100,
+):
+    """Searches across video segment metadata in Firestore.
+
+    Supports:
+    - `q`: Text query keyword (e.g. 'sports_key_plays', 'goal', 'Ronaldo', 'bicycle').
+    - `key`: Metadata attribute key filter (e.g. 'sports_key_plays', 'sports_play_type', 'detected_objects').
+    - `video_id`: Optional scoping to a specific video ID, or 'all'.
+    - `limit`: Maximum results (1-200, default 100).
+    """
+    safe_limit = max(1, min(limit, 200))
+    results = orchestrator.firestore_repo.search_chunks(
+        query=q,
+        key=key,
+        video_id=video_id,
+        limit=safe_limit,
+    )
+    return {
+        "results": results,
+        "total_results": len(results),
+        "query": q,
+        "key": key,
+        "video_id": video_id,
+        "limit": safe_limit,
+    }
+
+
+@app.get("/api/search/keys", dependencies=[Depends(require_auth)])
+async def get_searchable_keys():
+    """Returns a list of all searchable catalog metadata keys and categories."""
+    from src.catalog import METADATA_CATALOG, get_catalog_summary
+
+    keys_list = []
+    for k, v in METADATA_CATALOG.items():
+        keys_list.append({
+            "key": k,
+            "category": v.category,
+            "description": v.description,
+            "python_type": str(v.python_type),
+        })
+    return {
+        "keys": keys_list,
+        "categories": get_catalog_summary(),
     }
 
 
@@ -286,6 +349,9 @@ async def get_video_pipeline_logs(video_id: str):
     }
 
 
+MAX_STREAM_CHUNK_BYTES = 4 * 1024 * 1024  # 4 MB chunk size for video streaming
+
+
 @app.get("/api/videos/{video_id}/video", dependencies=[Depends(require_auth)])
 async def stream_video(video_id: str, request: Request):
     """Streams video file from Google Cloud Storage with HTTP 206 Partial Content support."""
@@ -300,7 +366,7 @@ async def stream_video(video_id: str, request: Request):
             detail=f"Video file not found at gs://{bucket_name}/{object_name}",
         )
 
-    file_size = blob.size
+    file_size = blob.size or 0
     range_header = request.headers.get("range")
 
     if range_header and file_size:
@@ -308,15 +374,30 @@ async def stream_video(video_id: str, request: Request):
         try:
             byte_range = range_header.replace("bytes=", "").split("-")
             start = int(byte_range[0]) if byte_range[0] else 0
-            end = int(byte_range[1]) if len(byte_range) > 1 and byte_range[1] else file_size - 1
-            end = min(end, file_size - 1)
+            if len(byte_range) > 1 and byte_range[1]:
+                req_end = int(byte_range[1])
+            else:
+                req_end = start + MAX_STREAM_CHUNK_BYTES - 1
+            # Clamp end to at most MAX_STREAM_CHUNK_BYTES from start to avoid huge memory downloads & Cloud Run response limits
+            end = min(req_end, start + MAX_STREAM_CHUNK_BYTES - 1, file_size - 1)
+            start = min(start, end)
         except Exception:
             start = 0
-            end = file_size - 1
+            end = min(MAX_STREAM_CHUNK_BYTES - 1, file_size - 1)
 
         data = blob.download_as_bytes(start=start, end=end)
         headers = {
             "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(data)),
+            "Content-Type": "video/mp4",
+        }
+        return Response(content=data, status_code=status.HTTP_206_PARTIAL_CONTENT, headers=headers)
+    elif file_size > MAX_STREAM_CHUNK_BYTES:
+        end = min(MAX_STREAM_CHUNK_BYTES - 1, file_size - 1)
+        data = blob.download_as_bytes(start=0, end=end)
+        headers = {
+            "Content-Range": f"bytes 0-{end}/{file_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(len(data)),
             "Content-Type": "video/mp4",

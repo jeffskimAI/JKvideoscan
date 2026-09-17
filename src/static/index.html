@@ -202,7 +202,7 @@
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
-          <span>Metadata Extractor</span>
+          <span>Metadata Config</span>
         </button>
 
         <button id="navLogsBtn" onclick="openSystemLogsModal()" title="View System & Execution Logs" class="tab-btn px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-400 hover:text-indigo-300 hover:bg-slate-800 border border-slate-700/60 flex items-center space-x-1.5">
@@ -227,6 +227,149 @@
 
     </div>
   </header>
+
+  <!-- ========================================== -->
+  <!-- TOP METADATA SEARCH BAR                    -->
+  <!-- ========================================== -->
+  <section class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur sticky top-16 z-40 px-4 sm:px-6 lg:px-8 py-3 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-col gap-2.5">
+      <!-- Search Input Controls Row -->
+      <form id="globalSearchForm" onsubmit="handleGlobalSearchSubmit(event)" class="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+        
+        <!-- Search Keyword Input with Magnifier Icon -->
+        <div class="relative flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <input
+            type="text"
+            id="globalSearchInput"
+            placeholder="Search metadata (e.g. sports_key_plays, goal, Ronaldo, bicycle, referee...)"
+            class="w-full pl-10 pr-10 py-2 bg-slate-950/70 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-sans"
+          />
+          <button
+            type="button"
+            id="clearSearchInputBtn"
+            onclick="clearSearchInput()"
+            title="Clear search"
+            class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Target Metadata Attribute Dropdown -->
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="relative min-w-[210px]">
+            <select
+              id="searchKeySelect"
+              class="w-full appearance-none bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-2 pr-8 text-xs font-medium text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">⚡ All Metadata Fields</option>
+              <optgroup label="Sports & Key Plays">
+                <option value="sports_key_plays" selected>⚡ sports_key_plays (Key Plays)</option>
+                <option value="sports_play_type">⚽ sports_play_type (Play Classification)</option>
+                <option value="sport_type">🏆 sport_type (Sport Name)</option>
+                <option value="significance_score">📊 significance_score (Impact Rating)</option>
+                <option value="significance_factors">💡 significance_factors (Explainability)</option>
+                <option value="game_state">⏱️ game_state (Score & Clock)</option>
+              </optgroup>
+              <optgroup label="Visual & Spatial">
+                <option value="scene_description">🎬 scene_description (Scene Narrative)</option>
+                <option value="detected_objects">🎯 detected_objects (Items & Entities)</option>
+                <option value="on_screen_text">🔤 on_screen_text (OCR Text)</option>
+                <option value="camera_movement">🎥 camera_movement (Camera Motion)</option>
+                <option value="brand_presence">🏷️ brand_presence (Brands & Logos)</option>
+                <option value="lighting_and_color">💡 lighting_and_color (Lighting & Mood)</option>
+              </optgroup>
+              <optgroup label="Audio & Speech">
+                <option value="transcript">🎙️ transcript (Spoken Dialogue)</option>
+                <option value="speaker_count">👥 speaker_count (Voice Count)</option>
+                <option value="ambient_sounds">🔊 ambient_sounds (SFX & Noise)</option>
+                <option value="vocal_emotion">🎭 vocal_emotion (Tone & Emotion)</option>
+              </optgroup>
+              <optgroup label="Actions & Semantic">
+                <option value="key_actions">🏃 key_actions (Primary Activities)</option>
+                <option value="interactions">🤝 interactions (Subject Actions)</option>
+                <option value="event_anomalies">⚡ event_anomalies (Unusual Events)</option>
+                <option value="chunk_summary">📝 chunk_summary (10s Summary)</option>
+                <option value="content_categories">📂 content_categories (Taxonomy)</option>
+                <option value="safety_flags">⚠️ safety_flags (Safety Alerts)</option>
+              </optgroup>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Video Scope Filter -->
+          <div class="relative min-w-[150px]">
+            <select
+              id="searchVideoSelect"
+              class="w-full appearance-none bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-2 pr-8 text-xs font-medium text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">🌐 All Videos</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Search Button -->
+          <button
+            type="submit"
+            id="globalSearchSubmitBtn"
+            class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 shadow-md shadow-indigo-500/20 flex items-center space-x-1.5 transition-all flex-shrink-0 cursor-pointer"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span>Search</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Quick-Filter Attribute Pills -->
+      <div class="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400">
+        <span class="font-semibold text-slate-400 flex items-center gap-1">
+          <svg class="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"/></svg>
+          Quick Tags:
+        </span>
+        <button type="button" onclick="quickFilterTag('sports_key_plays')" class="quick-tag-pill px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-yellow-500/20 border-2 border-amber-500/70 text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all cursor-pointer font-bold shadow-sm shadow-amber-500/20 flex items-center space-x-1 ring-1 ring-amber-400/30">
+          <span>⚡</span>
+          <span>sports_key_plays</span>
+          <span class="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded uppercase tracking-wider ml-0.5">Critical</span>
+        </button>
+        <button type="button" onclick="quickFilterTag('sports_play_type')" class="quick-tag-pill px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer">
+          ⚽ sports_play_type
+        </button>
+        <button type="button" onclick="quickFilterTag('scene_description')" class="quick-tag-pill px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer">
+          🎬 scene_description
+        </button>
+        <button type="button" onclick="quickFilterTag('detected_objects')" class="quick-tag-pill px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer">
+          🎯 detected_objects
+        </button>
+        <button type="button" onclick="quickFilterTag('transcript')" class="quick-tag-pill px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer">
+          🎙️ transcript
+        </button>
+        <button type="button" onclick="quickFilterTag('safety_flags')" class="quick-tag-pill px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer">
+          ⚠️ safety_flags
+        </button>
+        <span class="text-[10px] text-slate-400 ml-auto hidden md:inline-block">Tip: Press <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">⌘K</kbd> / <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Ctrl+K</kbd> to search</span>
+      </div>
+    </div>
+  </section>
 
   <!-- MAIN APP CONTAINER -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
@@ -693,9 +836,18 @@
         <!-- Video Details Header Bar -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div class="space-y-1">
-            <div class="flex items-center space-x-3">
+            <div class="flex flex-wrap items-center gap-3">
               <h2 id="inspectorVideoTitle" class="text-xl font-bold text-white font-mono">video_id</h2>
-              <span id="inspectorStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold">STATUS</span>
+              <div class="flex flex-col items-start gap-1">
+                <span id="inspectorStatusBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold">STATUS</span>
+                <span id="inspectorProgressCounter" class="text-[11px] font-mono text-amber-300 font-medium hidden"></span>
+              </div>
+              <!-- Video switcher dropdown for quick selection -->
+              <div class="relative inline-flex items-center">
+                <select id="inspectorVideoSelect" onchange="if(this.value) openVideoInspector(this.value)" class="bg-slate-950/80 border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-mono text-slate-200 px-2.5 py-1 focus:ring-1 focus:ring-indigo-500 focus:outline-none" title="Quickly switch inspected video">
+                  <option value="">Switch Video...</option>
+                </select>
+              </div>
             </div>
             
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 pt-1">
@@ -797,7 +949,13 @@
               <!-- Interactive 10s Timeline Scrubber -->
               <div class="space-y-2">
                 <div class="flex items-center justify-between text-xs text-slate-400">
-                  <span class="font-medium text-slate-300">10-Second Chunk Scrubber</span>
+                  <div class="flex items-center space-x-2.5">
+                    <span class="font-medium text-slate-300">10-Second Chunk Scrubber</span>
+                    <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-yellow-500/10 border border-amber-400/40 text-[10px] font-black text-amber-300 shadow-sm shadow-amber-500/10">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                      <span>⚡ Sports Key Plays Highlighted</span>
+                    </span>
+                  </div>
                   <span id="playerCurrentTimeLabel" class="font-mono text-cyan-400">00:00 / 00:00</span>
                 </div>
                 <div id="chunksTimelineScrubber" class="flex gap-1.5 overflow-x-auto py-1">
@@ -843,12 +1001,12 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 4: METADATA EXTRACTOR GUIDE            -->
+    <!-- TAB 4: METADATA CONFIG GUIDE               -->
     <!-- ========================================== -->
     <section id="tabCatalogSection" class="hidden space-y-6">
       <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
         <div>
-          <h2 class="text-xl font-bold text-white">Metadata Extractor Dictionary</h2>
+          <h2 class="text-xl font-bold text-white">Metadata Config Dictionary</h2>
           <p class="text-xs text-slate-400 mt-1">
             Reference definitions matching <code class="text-indigo-400">metadata_catalog.md</code>. Vertex AI Gemini generates structured JSON schemas conforming to these 17 supported fields.
           </p>
@@ -864,8 +1022,13 @@
 
   <!-- FOOTER -->
   <footer class="border-t border-slate-800 py-6 mt-12 bg-slate-950 text-center text-xs text-slate-500">
-    <div class="max-w-7xl mx-auto px-4">
-      Jeff's VideoScan &middot; Powered by Google Cloud Run &middot; Cloud Storage &middot; Cloud Firestore &middot; Vertex AI Gemini
+    <div class="max-w-7xl mx-auto px-4 space-y-2">
+      <div>
+        Jeff's VideoScan &middot; Powered by Google Cloud Run &middot; Cloud Storage &middot; Cloud Firestore &middot; Vertex AI Gemini
+      </div>
+      <div class="text-[11px] text-slate-400 max-w-3xl mx-auto leading-relaxed">
+        ℹ️ Demo Environment Notice: Sample media is sourced from Archive.org under Public Domain &amp; Creative Commons licensing strictly for encoding, pipeline, and functional development testing and is for non-commercial use.
+      </div>
     </div>
   </footer>
 
@@ -1020,6 +1183,62 @@
           Close
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- SEARCH RESULTS MODAL                       -->
+  <!-- ========================================== -->
+  <div id="searchResultsModal" class="fixed inset-0 z-[95] bg-slate-950/85 backdrop-blur-md hidden flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="searchResultsModalTitle">
+    <div class="relative w-full max-w-5xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 id="searchResultsModalTitle" class="text-base font-bold text-white">Metadata Search Results</h3>
+              <span id="searchResultsCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">0 matches</span>
+            </div>
+            <!-- Active Search Filter Pills -->
+            <div id="searchActiveFiltersContainer" class="flex items-center space-x-2 text-xs text-slate-400 mt-1 flex-wrap gap-y-1">
+              <span>Searching:</span>
+              <span id="searchFilterKeyPill" class="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono text-[11px]">Key: All</span>
+              <span id="searchFilterQueryPill" class="hidden px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[11px]">Query: ""</span>
+              <span id="searchFilterScopePill" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px]">Scope: All Videos</span>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="closeSearchResultsModal()" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors" title="Close (Esc)">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body / Content -->
+      <div id="searchResultsModalBody" class="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 max-h-[70vh] bg-slate-950/30">
+        <!-- Dynamic Result Cards injected here -->
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between text-xs text-slate-400">
+        <span id="searchResultsFooterStatus">Ready</span>
+        <div class="flex items-center space-x-2">
+          <button onclick="closeSearchResultsModal()" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1232,7 +1451,7 @@
     });
 
     // Switch active view tab
-    function switchTab(tabId) {
+    function switchTab(tabId, triggerInspectorLoad = true) {
       const tabs = ['upload', 'library', 'inspector', 'catalog'];
       tabs.forEach(t => {
         const btn = document.getElementById('nav' + t.charAt(0).toUpperCase() + t.slice(1));
@@ -1247,17 +1466,23 @@
         }
       });
       window.location.hash = tabId;
+
+      // Stop background inspector polling if navigating away from inspector tab
+      if (tabId !== 'inspector' && pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+
       if (tabId === 'library') {
         fetchVideosList();
-      } else if (tabId === 'inspector') {
+      } else if (tabId === 'inspector' && triggerInspectorLoad) {
         if (currentVideoId) {
           if (!activeVideoData || !activeVideoData.video || activeVideoData.video.video_id !== currentVideoId) {
             openVideoInspector(currentVideoId);
           }
         } else if (cachedVideos && cachedVideos.length > 0) {
-          const procVid = cachedVideos.find(v => v.status === 'PROCESSING');
-          const targetId = procVid ? procVid.video_id : cachedVideos[0].video_id;
-          openVideoInspector(targetId);
+          // Never force-hijack to a background processing video; show the first video in the library
+          openVideoInspector(cachedVideos[0].video_id);
         } else {
           document.getElementById('inspectorEmptyState').classList.remove('hidden');
           document.getElementById('inspectorActiveContent').classList.add('hidden');
@@ -1786,7 +2011,7 @@
         return;
       }
 
-      currentVideoId = signedData.video_id;
+      lastUploadedVideoId = signedData.video_id;
       titleLabel.textContent = 'Uploading Directly to Google Cloud Storage...';
       descLabel.textContent = `Streaming ${selectedVideoFile.name} (${sizeMb} MB) directly to gs://${signedData.gcs_bucket}/${signedData.video_object}...`;
       progressBar.style.width = '15%';
@@ -1822,7 +2047,7 @@
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {})
               },
               body: JSON.stringify({
-                video_id: currentVideoId,
+                video_id: signedData.video_id,
                 run_pipeline: true
               })
             });
@@ -1837,15 +2062,9 @@
             titleLabel.textContent = 'Uploaded Successfully!';
             descLabel.textContent = 'Direct GCS upload complete. Pipeline processing is running. Upload page is reset and ready for next file.';
 
-            const finishedVideoId = currentVideoId;
+            const finishedVideoId = signedData.video_id;
             const finishedGcsUri = signedData.gcs_uri;
             const finishedTargetMeta = signedData.target_metadata;
-
-            // Clear inspector tab immediately and show PROCESSING to match Firestore library
-            clearInspectorTab(finishedVideoId, 'PROCESSING', {
-              gcs_uri: finishedGcsUri,
-              target_metadata: finishedTargetMeta
-            });
 
             // Refresh library count in background so badge updates
             fetchVideosList();
@@ -1898,6 +2117,8 @@
           cachedVideos = data.videos || [];
           renderVideosGrid(cachedVideos);
           document.getElementById('libraryBadge').textContent = cachedVideos.length;
+          updateSearchVideoSelect(cachedVideos);
+          updateInspectorVideoSelect(cachedVideos);
         }
       } catch (e) {
         console.error('Failed to fetch videos from Firestore:', e);
@@ -1955,7 +2176,20 @@
         if (status === 'COMPLETED') {
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span></span>';
         } else if (status === 'PROCESSING') {
-          statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span></span>';
+          const procCount = v.processed_chunks || 0;
+          const totCount = v.total_chunks || 0;
+          const countText = totCount > 0 ? `Chunk ${procCount} of ${totCount}` : (procCount > 0 ? `Chunk ${procCount} extracted` : 'Initializing...');
+          statusBadge = `
+            <div class="flex flex-col items-end">
+              <span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-semibold flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span>
+                <span>PROCESSING</span>
+              </span>
+              <span class="text-[11px] font-mono text-amber-300 font-medium tracking-tight mt-1">
+                ${countText}
+              </span>
+            </div>
+          `;
         } else if (status === 'STOPPED' || status === 'CANCELLED') {
           statusBadge = '<span class="px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-[11px] font-semibold flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span></span>';
         } else {
@@ -2114,19 +2348,29 @@
 
       // Status badge: exactly match the Firestore library badge appearance and text
       const badge = document.getElementById('inspectorStatusBadge');
+      const progCounter = document.getElementById('inspectorProgressCounter');
       const st = (status || '').toUpperCase();
       if (st === 'COMPLETED') {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
+        if (progCounter) progCounter.classList.add('hidden');
       } else if (st === 'PROCESSING') {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
+        if (progCounter) {
+          progCounter.classList.remove('hidden');
+          const total = meta.total_chunks || 0;
+          const processed = meta.processed_chunks || 0;
+          progCounter.textContent = total > 0 ? `Chunk ${processed} of ${total}` : (processed > 0 ? `Chunk ${processed} extracted` : 'Initializing...');
+        }
       } else if (st === 'STOPPED' || st === 'CANCELLED') {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span>';
+        if (progCounter) progCounter.classList.add('hidden');
       } else {
         badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
+        if (progCounter) progCounter.classList.add('hidden');
       }
 
       const stopBtn = document.getElementById('btnInspectorStop');
@@ -2166,8 +2410,10 @@
       const videoSrc = `/api/videos/${encodeURIComponent(videoId)}/video` + (token ? `?token=${encodeURIComponent(token)}` : '');
       const videoPlayer = document.getElementById('inspectorVideoPlayer');
       const sourceTag = document.getElementById('videoSourceTag');
-      if (sourceTag.getAttribute('src') !== videoSrc) {
-        sourceTag.src = videoSrc;
+      if (videoPlayer && videoPlayer.getAttribute('data-loaded-src') !== videoSrc) {
+        videoPlayer.setAttribute('data-loaded-src', videoSrc);
+        videoPlayer.src = videoSrc;
+        if (sourceTag) sourceTag.src = videoSrc;
         videoPlayer.load();
       }
 
@@ -2208,8 +2454,14 @@
 
     // Open Video Metadata Inspector Detail View
     async function openVideoInspector(videoId, initialStatus = null, meta = {}) {
+      // 1. Immediately cancel any prior polling so other videos cannot overwrite the view
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+
       currentVideoId = videoId;
-      switchTab('inspector');
+      switchTab('inspector', false);
 
       // Determine initial status if known from cachedVideos
       let status = initialStatus;
@@ -2225,22 +2477,39 @@
       // Always clear the tab immediately and show status matching Firestore library
       clearInspectorTab(videoId, status, meta);
 
+      // Sync the switcher dropdown
+      const sel = document.getElementById('inspectorVideoSelect');
+      if (sel) sel.value = videoId;
+
       await loadVideoDetails(videoId);
 
-      // Start polling if status is PROCESSING
-      if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(async () => {
-        if (activeVideoData && activeVideoData.video && activeVideoData.video.status === 'PROCESSING') {
-          await loadVideoDetails(videoId, false);
-        } else {
-          clearInterval(pollInterval);
-        }
-      }, 3500);
+      // 2. Start polling ONLY if this video is still current AND its status is PROCESSING
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      const isProc = (activeVideoData && activeVideoData.video && activeVideoData.video.status === 'PROCESSING') || status === 'PROCESSING';
+      if (isProc && currentVideoId === videoId) {
+        pollInterval = setInterval(async () => {
+          const currentTab = window.location.hash.replace('#', '') || 'inspector';
+          // Immediately stop if user left inspector tab or switched to a different video
+          if (currentTab !== 'inspector' || currentVideoId !== videoId) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            return;
+          }
+          if (activeVideoData && activeVideoData.video && activeVideoData.video.status === 'PROCESSING') {
+            await loadVideoDetails(videoId, false);
+          } else {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+        }, 3500);
+      }
     }
 
     // Load detailed video record + chunks from Firestore
     async function loadVideoDetails(videoId, resetPlayer = true) {
-      currentVideoId = videoId;
       try {
         const res = await apiFetch(`/api/videos/${videoId}`);
         if (!res.ok) {
@@ -2252,9 +2521,18 @@
         }
 
         const data = await res.json();
+        // Discard stale responses if user switched videos while request was in flight
+        if (currentVideoId !== videoId) {
+          return;
+        }
+
         activeVideoData = data;
         const v = data.video || {};
         const chunks = data.chunks || [];
+
+        // Sync dropdown value
+        const sel = document.getElementById('inspectorVideoSelect');
+        if (sel) sel.value = videoId;
 
         // Header
         document.getElementById('inspectorVideoTitle').textContent = v.video_id || videoId;
@@ -2266,19 +2544,29 @@
 
         // Status badge: match Firestore library
         const badge = document.getElementById('inspectorStatusBadge');
+        const progCounter = document.getElementById('inspectorProgressCounter');
         const st = (v.status || '').toUpperCase();
         if (st === 'COMPLETED') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>COMPLETED</span>';
+          if (progCounter) progCounter.classList.add('hidden');
         } else if (st === 'PROCESSING') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-dot"></span><span>PROCESSING</span>';
+          if (progCounter) {
+            progCounter.classList.remove('hidden');
+            const total = v.total_chunks || 0;
+            const processed = (chunks && chunks.length) || v.processed_chunks || 0;
+            progCounter.textContent = total > 0 ? `Chunk ${processed} of ${total}` : (processed > 0 ? `Chunk ${processed} extracted` : 'Initializing...');
+          }
         } else if (st === 'STOPPED' || st === 'CANCELLED') {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/50 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>STOPPED</span>';
+          if (progCounter) progCounter.classList.add('hidden');
         } else {
           badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center space-x-1';
           badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>FAILED</span>';
+          if (progCounter) progCounter.classList.add('hidden');
         }
 
         const stopBtn = document.getElementById('btnInspectorStop');
@@ -2304,8 +2592,10 @@
           const token = getAuthToken();
           const videoSrc = `/api/videos/${encodeURIComponent(videoId)}/video` + (token ? `?token=${encodeURIComponent(token)}` : '');
           const sourceTag = document.getElementById('videoSourceTag');
-          if (sourceTag.getAttribute('src') !== videoSrc) {
-            sourceTag.src = videoSrc;
+          if (videoPlayer && videoPlayer.getAttribute('data-loaded-src') !== videoSrc) {
+            videoPlayer.setAttribute('data-loaded-src', videoSrc);
+            videoPlayer.src = videoSrc;
+            if (sourceTag) sourceTag.src = videoSrc;
             videoPlayer.load();
           }
         }
@@ -2324,7 +2614,7 @@
       }
     }
 
-    // Render interactive 10-second chunk scrubber blocks
+    // Render interactive 10-second chunk scrubber blocks with Key Plays highlighted
     function renderTimelineScrubber(chunks, totalDuration) {
       const container = document.getElementById('chunksTimelineScrubber');
       if (!chunks || chunks.length === 0) {
@@ -2335,15 +2625,37 @@
       container.innerHTML = chunks.map((c, idx) => {
         const start = c.start_time_seconds || 0;
         const end = c.end_time_seconds || 10;
+        const meta = c.extracted_metadata || {};
+        const hasKeyPlay = meta.sports_key_plays && Array.isArray(meta.sports_key_plays) && meta.sports_key_plays.length > 0;
+
+        const baseClasses = hasKeyPlay
+          ? 'scrubber-block flex-1 min-w-[76px] px-2.5 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-600/40 border-2 border-amber-400 text-center transition-all group ring-1 ring-amber-400/40 shadow-sm shadow-amber-500/20'
+          : 'scrubber-block flex-1 min-w-[72px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 text-center transition-all group';
+
+        const indexBadge = hasKeyPlay
+          ? `<span class="block text-[10px] font-mono font-black text-amber-300 group-hover:text-yellow-200 flex items-center justify-center space-x-0.5"><span>⚡</span><span>#${idx}</span></span>`
+          : `<span class="block text-[10px] font-mono font-bold text-indigo-400 group-hover:text-indigo-300">#${idx}</span>`;
+
+        const timeLabel = hasKeyPlay
+          ? `<span class="block text-[9px] font-mono text-amber-200/90 font-medium">${start.toFixed(0)}s - ${end.toFixed(0)}s</span>`
+          : `<span class="block text-[9px] font-mono text-slate-400">${start.toFixed(0)}s - ${end.toFixed(0)}s</span>`;
+
+        const playCountBadge = hasKeyPlay
+          ? `<span class="block text-[8px] font-mono font-black uppercase tracking-wider text-amber-300 bg-amber-500/30 rounded px-1 mt-0.5">KEY PLAY</span>`
+          : '';
+
         return `
           <button 
             type="button" 
             id="scrubberBlock_${idx}"
             onclick="seekVideoPlayer(${start})"
-            class="scrubber-block flex-1 min-w-[72px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 text-center transition-all group"
+            data-has-key-play="${hasKeyPlay ? 'true' : 'false'}"
+            class="${baseClasses}"
+            title="${hasKeyPlay ? `⚡ Key Play: ${escapeHtml(String(meta.sports_key_plays[0]))}` : `Chunk #${idx} (${start.toFixed(0)}s - ${end.toFixed(0)}s)`}"
           >
-            <span class="block text-[10px] font-mono font-bold text-indigo-400 group-hover:text-indigo-300">#${idx}</span>
-            <span class="block text-[9px] font-mono text-slate-400">${start.toFixed(0)}s - ${end.toFixed(0)}s</span>
+            ${indexBadge}
+            ${timeLabel}
+            ${playCountBadge}
           </button>
         `;
       }).join('');
@@ -2352,11 +2664,39 @@
     // Seek HTML5 Video Player to specific second
     function seekVideoPlayer(seconds) {
       const player = document.getElementById('inspectorVideoPlayer');
-      player.currentTime = seconds;
-      player.play().catch(() => {});
+      if (!player) return;
+
+      const targetSec = Math.max(0, parseFloat(seconds) || 0);
+
+      const doPlay = () => {
+        try {
+          player.currentTime = targetSec;
+          const p = player.play();
+          if (p && typeof p.catch === 'function') {
+            p.catch(err => {
+              console.warn('Playback notice:', err);
+            });
+          }
+        } catch (e) {
+          console.warn('Seek error:', e);
+        }
+      };
+
+      if (player.readyState >= 1) {
+        doPlay();
+      } else {
+        const onLoaded = () => {
+          player.removeEventListener('loadedmetadata', onLoaded);
+          player.removeEventListener('canplay', onLoaded);
+          doPlay();
+        };
+        player.addEventListener('loadedmetadata', onLoaded, { once: true });
+        player.addEventListener('canplay', onLoaded, { once: true });
+        player.load();
+      }
       
       // Smooth scroll to corresponding chunk card
-      const chunkCard = document.getElementById(`chunkCard_${Math.floor(seconds / 10)}`);
+      const chunkCard = document.getElementById(`chunkCard_${Math.floor(targetSec / 10)}`);
       if (chunkCard) {
         chunkCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -2378,22 +2718,36 @@
 
       const activeChunkIdx = Math.floor(cur / 10);
       document.querySelectorAll('.scrubber-block').forEach((el, idx) => {
+        const isKeyPlay = el.getAttribute('data-has-key-play') === 'true';
         if (idx === activeChunkIdx) {
           el.classList.add('bg-indigo-600', 'border-indigo-400', 'text-white');
-          el.classList.remove('bg-slate-800', 'text-slate-400');
+          el.classList.remove('bg-slate-800', 'text-slate-400', 'bg-amber-950/40', 'border-amber-400');
         } else {
           el.classList.remove('bg-indigo-600', 'border-indigo-400', 'text-white');
-          el.classList.add('bg-slate-800', 'text-slate-400');
+          if (isKeyPlay) {
+            el.classList.add('bg-amber-950/40', 'border-amber-400');
+            el.classList.remove('bg-slate-800');
+          } else {
+            el.classList.add('bg-slate-800', 'text-slate-400');
+            el.classList.remove('bg-amber-950/40', 'border-amber-400');
+          }
         }
       });
 
       document.querySelectorAll('.chunk-card').forEach((el, idx) => {
+        const isKeyPlay = el.getAttribute('data-has-key-play') === 'true';
         if (idx === activeChunkIdx) {
-          el.classList.add('ring-2', 'ring-indigo-500', 'bg-slate-900');
-          el.classList.remove('border-slate-800');
+          el.classList.add('ring-2', 'ring-indigo-500');
+          el.classList.remove('border-slate-800', 'border-amber-500/70');
         } else {
           el.classList.remove('ring-2', 'ring-indigo-500');
-          el.classList.add('border-slate-800');
+          if (isKeyPlay) {
+            el.classList.add('border-amber-500/70');
+            el.classList.remove('border-slate-800');
+          } else {
+            el.classList.add('border-slate-800');
+            el.classList.remove('border-amber-500/70');
+          }
         }
       });
     }
@@ -2531,15 +2885,57 @@
           </div>
         ` : '';
 
+        // Sports Key Plays Prominent Highlight Section
+        const hasKeyPlays = meta.sports_key_plays && Array.isArray(meta.sports_key_plays) && meta.sports_key_plays.length > 0;
+        let sportsPlaysHtml = '';
+        if (hasKeyPlays) {
+          sportsPlaysHtml = `
+            <div class="bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-slate-950/90 border-2 border-amber-500/80 rounded-xl p-4 space-y-2.5 shadow-lg shadow-amber-950/40">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <span class="flex h-6 w-6 rounded-lg bg-gradient-to-tr from-amber-400 to-yellow-400 text-slate-950 items-center justify-center text-xs font-black shadow">⚡</span>
+                  <span class="text-xs font-black text-amber-300 uppercase tracking-wider">Sports Key Plays</span>
+                </div>
+                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                  ${meta.sports_key_plays.length} Play${meta.sports_key_plays.length > 1 ? 's' : ''} Identified
+                </span>
+              </div>
+              <div class="space-y-1.5 pt-0.5">
+                ${meta.sports_key_plays.map(play => {
+                  const playText = typeof play === 'string' ? play : (play.play_description || play.description || play.name || JSON.stringify(play));
+                  return `
+                    <div class="flex items-start space-x-2.5 bg-amber-950/50 border border-amber-500/30 rounded-lg p-2.5 text-xs text-amber-100 font-medium">
+                      <span class="text-amber-400 font-bold select-none text-sm mt-0.5">▶</span>
+                      <span class="leading-relaxed font-sans">${escapeHtml(playText)}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        // Header Key Play Badge
+        let keyPlayHeaderBadge = '';
+        if (hasKeyPlays) {
+          keyPlayHeaderBadge = `
+            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-amber-500/30 to-yellow-500/20 text-amber-300 border border-amber-400/50 flex items-center space-x-1.5 shadow-sm shadow-amber-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span>⚡ KEY PLAY</span>
+            </span>
+          `;
+        }
+
         return `
           <div 
             id="chunkCard_${idx}" 
-            class="chunk-card bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 transition-all shadow-md"
+            data-has-key-play="${hasKeyPlays ? 'true' : 'false'}"
+            class="chunk-card ${hasKeyPlays ? 'bg-gradient-to-br from-amber-950/20 via-slate-900 to-slate-900 border-2 border-amber-500/70 shadow-lg shadow-amber-950/30' : 'bg-slate-900 border border-slate-800'} rounded-2xl p-5 space-y-4 transition-all shadow-md"
           >
             <!-- Chunk Header -->
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-2.5">
-                <span class="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-xs font-mono font-bold">#${idx}</span>
+                <span class="w-7 h-7 rounded-lg ${hasKeyPlays ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-indigo-600/20 text-indigo-400'} flex items-center justify-center text-xs font-mono font-bold">#${idx}</span>
                 <div>
                   <div class="flex items-center space-x-2">
                     <span class="text-sm font-bold text-white font-mono">[${start}s - ${end}s]</span>
@@ -2549,19 +2945,23 @@
               </div>
 
               <div class="flex items-center space-x-2">
+                ${keyPlayHeaderBadge}
                 ${sentimentPill}
                 <button 
                   type="button" 
                   onclick="seekVideoPlayer(${start})" 
-                  class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1"
+                  class="px-3 py-1 rounded-lg ${hasKeyPlays ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 hover:from-amber-400 hover:to-yellow-300 font-black shadow-md shadow-amber-500/30' : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white font-medium border border-slate-700'} text-xs transition-colors flex items-center space-x-1"
                 >
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
                   </svg>
-                  <span>Play</span>
+                  <span>${hasKeyPlays ? 'Play Key Play' : 'Play'}</span>
                 </button>
               </div>
             </div>
+
+            <!-- Prominent Sports Key Plays Section -->
+            ${sportsPlaysHtml}
 
             <!-- Chunk Summary -->
             ${meta.chunk_summary ? `<p class="text-xs font-medium text-slate-300 leading-relaxed">${escapeHtml(meta.chunk_summary)}</p>` : ''}
@@ -3027,7 +3427,7 @@
           alert(data.message || 'All active processes stopped.');
           await fetchVideosList(true);
           if (currentVideoId) {
-            await loadVideoMetadata(currentVideoId);
+            await loadVideoDetails(currentVideoId, false);
           }
         } else {
           const err = await res.json();
@@ -3051,7 +3451,7 @@
         if (res.ok) {
           await fetchVideosList(true);
           if (currentVideoId === vid) {
-            await loadVideoMetadata(vid);
+            await loadVideoDetails(vid, false);
           }
         } else {
           const err = await res.json();
@@ -3074,11 +3474,17 @@
         const res = await apiFetch(`/api/videos/${encodeURIComponent(vid)}`, { method: 'DELETE' });
         if (res.ok) {
           alert('Video deleted.');
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
           activeVideoData = null;
           currentVideoId = null;
           if (cachedVideos) {
             cachedVideos = cachedVideos.filter(v => v.video_id !== vid);
           }
+          updateSearchVideoSelect(cachedVideos);
+          updateInspectorVideoSelect(cachedVideos);
           document.getElementById('inspectorEmptyState').classList.remove('hidden');
           document.getElementById('inspectorActiveContent').classList.add('hidden');
           switchTab('library');
@@ -3125,6 +3531,460 @@
         </div>
       `).join('');
     }
+
+    // ====================================================
+    // GLOBAL SEARCH CAPABILITY (METADATA ATTRIBUTES & KEYS)
+    // ====================================================
+    let cachedSearchData = null;
+
+    function formatTimeSec(seconds) {
+      const s = Math.max(0, Math.floor(seconds || 0));
+      const mins = Math.floor(s / 60);
+      const secs = s % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function updateSearchVideoSelect(videos) {
+      const select = document.getElementById('searchVideoSelect');
+      if (!select) return;
+      const currentVal = select.value;
+      select.innerHTML = '<option value="all">🌐 All Videos</option>';
+      (videos || []).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.video_id;
+        const fn = v.filename || v.video_id;
+        opt.textContent = `🎬 ${fn.length > 28 ? fn.substring(0, 25) + '...' : fn}`;
+        if (v.video_id === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    function updateInspectorVideoSelect(videos) {
+      const select = document.getElementById('inspectorVideoSelect');
+      if (!select) return;
+      select.innerHTML = '<option value="">Switch Video...</option>';
+      (videos || []).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.video_id;
+        const fn = v.filename || v.video_id;
+        const st = (v.status || '').toUpperCase();
+        const icon = st === 'COMPLETED' ? '✅' : (st === 'PROCESSING' ? '⏳' : '⚠️');
+        opt.textContent = `${icon} ${fn.length > 36 ? fn.substring(0, 33) + '...' : fn}`;
+        if (currentVideoId && v.video_id === currentVideoId) opt.selected = true;
+        select.appendChild(opt);
+      });
+      if (currentVideoId) select.value = currentVideoId;
+    }
+
+    function clearSearchInput() {
+      const input = document.getElementById('globalSearchInput');
+      const clearBtn = document.getElementById('clearSearchInputBtn');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+      if (clearBtn) clearBtn.classList.add('hidden');
+    }
+
+    function handleGlobalSearchSubmit(e) {
+      if (e) e.preventDefault();
+      executeGlobalSearch();
+    }
+
+    function quickFilterTag(keyName) {
+      const keySelect = document.getElementById('searchKeySelect');
+      if (keySelect) keySelect.value = keyName;
+      executeGlobalSearch(null, keyName, null);
+    }
+
+    function openSearchResultsModal(query, key, videoId) {
+      const modal = document.getElementById('searchResultsModal');
+      const body = document.getElementById('searchResultsModalBody');
+      const countBadge = document.getElementById('searchResultsCountBadge');
+      const keyPill = document.getElementById('searchFilterKeyPill');
+      const queryPill = document.getElementById('searchFilterQueryPill');
+      const scopePill = document.getElementById('searchFilterScopePill');
+      const footerStatus = document.getElementById('searchResultsFooterStatus');
+
+      if (!modal) return;
+      modal.classList.remove('hidden');
+
+      // Update Header Badges
+      if (keyPill) keyPill.textContent = key ? `Key: ${key}` : 'Key: All Attributes';
+      if (queryPill) {
+        if (query) {
+          queryPill.textContent = `Query: "${query}"`;
+          queryPill.classList.remove('hidden');
+        } else {
+          queryPill.classList.add('hidden');
+        }
+      }
+      if (scopePill) {
+        if (videoId && videoId !== 'all') {
+          scopePill.textContent = `Scope: ${videoId}`;
+        } else {
+          scopePill.textContent = 'Scope: All Videos';
+        }
+      }
+
+      if (countBadge) {
+        countBadge.textContent = 'Searching...';
+        countBadge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 animate-pulse';
+      }
+
+      if (footerStatus) footerStatus.textContent = 'Querying Firestore chunks index...';
+
+      // Show spinner in body
+      if (body) {
+        body.innerHTML = `
+          <div class="py-16 flex flex-col items-center justify-center text-center space-y-3">
+            <svg class="animate-spin h-8 w-8 text-indigo-400" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <p class="text-sm font-semibold text-white">Scanning metadata catalog...</p>
+            <p class="text-xs text-slate-400">Searching chunks across Firestore video records</p>
+          </div>
+        `;
+      }
+    }
+
+    function closeSearchResultsModal() {
+      const modal = document.getElementById('searchResultsModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function executeGlobalSearch(query = null, key = null, videoId = null) {
+      const qInput = document.getElementById('globalSearchInput');
+      const keySelect = document.getElementById('searchKeySelect');
+      const vidSelect = document.getElementById('searchVideoSelect');
+      const clearBtn = document.getElementById('clearSearchInputBtn');
+
+      const q = query !== null ? query : (qInput ? qInput.value.trim() : '');
+      const k = key !== null ? key : (keySelect ? keySelect.value : '');
+      const vid = videoId !== null ? videoId : (vidSelect ? vidSelect.value : 'all');
+
+      if (query !== null && qInput) qInput.value = query;
+      if (key !== null && keySelect) keySelect.value = key;
+      if (videoId !== null && vidSelect) vidSelect.value = videoId;
+
+      if (clearBtn) {
+        if (q) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+
+      openSearchResultsModal(q, k, vid);
+
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (k) params.set('key', k);
+        if (vid && vid !== 'all') params.set('video_id', vid);
+        params.set('limit', '100');
+
+        const res = await apiFetch(`/api/search?${params.toString()}`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server returned HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        cachedSearchData = data;
+        renderSearchResults(data);
+      } catch (err) {
+        console.error('Search request failed:', err);
+        renderSearchResultsError(err.message);
+      }
+    }
+
+    function renderSearchResults(data) {
+      const body = document.getElementById('searchResultsModalBody');
+      const countBadge = document.getElementById('searchResultsCountBadge');
+      const footerStatus = document.getElementById('searchResultsFooterStatus');
+      if (!body) return;
+
+      const results = (data && data.results) || [];
+      const total = results.length;
+
+      if (countBadge) {
+        countBadge.textContent = `${total} match${total === 1 ? '' : 'es'}`;
+        countBadge.className = `px-2 py-0.5 rounded-full text-[11px] font-bold ${
+          total > 0
+            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            : 'bg-slate-700/50 text-slate-400 border border-slate-600'
+        }`;
+      }
+
+      if (footerStatus) {
+        footerStatus.textContent = total > 0 ? `Displaying ${total} matching video segment${total === 1 ? '' : 's'}` : 'No matches found';
+      }
+
+      if (total === 0) {
+        body.innerHTML = `
+          <div class="py-16 text-center space-y-4 bg-slate-900/60 border border-slate-800 rounded-2xl p-8">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+              <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <div>
+              <h4 class="text-base font-bold text-white">No Matching Segments Found</h4>
+              <p class="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                We couldn't find any segments matching your filter criteria. Try searching for broader terms, switching the attribute dropdown, or scanning across all videos.
+              </p>
+            </div>
+            <div class="pt-2 flex justify-center gap-2">
+              <button onclick="quickFilterTag('sports_key_plays')" class="px-3 py-1 rounded-lg bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs hover:bg-indigo-600/50">
+                ⚡ Try sports_key_plays
+              </button>
+              <button onclick="executeGlobalSearch('', '', 'all')" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs hover:bg-slate-700">
+                Reset Filters
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      body.innerHTML = results.map((r, i) => {
+        const startSec = r.start_time_seconds || 0;
+        const endSec = r.end_time_seconds || (startSec + 10);
+        const timeFormatted = `${formatTimeSec(startSec)} - ${formatTimeSec(endSec)}`;
+        const videoId = r.video_id || 'unknown';
+        const chunkIdx = r.chunk_index ?? 0;
+
+        const isKeyPlay = r.matched_key === 'sports_key_plays' || Boolean(r.sports_key_plays) || (r.raw_chunk && r.raw_chunk.extracted_metadata && r.raw_chunk.extracted_metadata.sports_key_plays && r.raw_chunk.extracted_metadata.sports_key_plays.length > 0);
+
+        // Significance Score Badge
+        let scorePill = '';
+        if (r.significance_score !== undefined && r.significance_score !== null) {
+          const score = Number(r.significance_score);
+          const scoreClass = score >= 0.8
+            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold'
+            : score >= 0.5
+            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            : 'bg-slate-800 text-slate-400 border-slate-700';
+          scorePill = `<span class="px-2 py-0.5 rounded-full text-[10px] border ${scoreClass} flex items-center space-x-1" title="Significance Score"><span>⭐</span><span>${score.toFixed(2)}</span></span>`;
+        }
+
+        // Sports Play Type Pill
+        let playTypePill = '';
+        if (r.sports_play_type) {
+          const playName = String(r.sports_play_type).replace(/_/g, ' ');
+          const isGoal = playName.toLowerCase().includes('goal');
+          playTypePill = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+            isGoal
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+          } flex items-center space-x-1"><span>⚽</span><span class="capitalize">${escapeHtml(playName)}</span></span>`;
+        }
+
+        // Sports Key Play Featured Badge
+        const keyPlayPill = isKeyPlay ? `
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 flex items-center space-x-1 shadow-sm shadow-amber-500/20">
+            <span>⚡</span>
+            <span>SPORTS KEY PLAY</span>
+          </span>
+        ` : '';
+
+        // Matched Key Badge
+        const matchedKeyLabel = r.matched_key ? `⚡ ${escapeHtml(r.matched_key)}` : 'Metadata Match';
+
+        // Matched Value / Highlight Preview
+        let valuePreview = '';
+        if (r.matched_value) {
+          const valStr = typeof r.matched_value === 'string' ? r.matched_value : JSON.stringify(r.matched_value);
+          if (isKeyPlay) {
+            valuePreview = `
+              <div class="bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-slate-950 border-2 border-amber-500/70 rounded-xl p-3.5 space-y-1.5 shadow-md shadow-amber-950/30">
+                <div class="flex items-center space-x-1.5 text-amber-300 text-xs font-black uppercase tracking-wider">
+                  <span>⚡</span>
+                  <span>Sports Key Play Moment:</span>
+                </div>
+                <p class="text-sm font-semibold text-amber-100 leading-relaxed font-sans">${escapeHtml(valStr)}</p>
+              </div>
+            `;
+          } else {
+            valuePreview = `<div class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 font-mono text-xs text-indigo-200 break-words leading-relaxed">${escapeHtml(valStr)}</div>`;
+          }
+        }
+
+        // Context / Factors snippet
+        let extraSnippet = '';
+        if (r.significance_factors && Array.isArray(r.significance_factors) && r.significance_factors.length > 0) {
+          extraSnippet = `
+            <div class="text-xs text-slate-300 flex items-start gap-1.5 pt-1">
+              <span class="text-indigo-400 font-semibold flex-shrink-0">Factors:</span>
+              <span class="text-slate-300">${r.significance_factors.map(f => `<span class="inline-block mr-1.5 mb-1 px-2 py-0.5 rounded bg-slate-800/80 text-[11px] text-slate-300 border border-slate-700/60">${escapeHtml(String(f))}</span>`).join('')}</span>
+            </div>
+          `;
+        } else if (r.chunk_summary) {
+          extraSnippet = `<p class="text-xs text-slate-400 italic leading-relaxed pt-1">"${escapeHtml(r.chunk_summary)}"</p>`;
+        } else if (r.scene_description) {
+          extraSnippet = `<p class="text-xs text-slate-400 italic leading-relaxed pt-1">"${escapeHtml(r.scene_description)}"</p>`;
+        }
+
+        const cardClasses = isKeyPlay
+          ? 'search-result-card bg-gradient-to-br from-amber-950/25 via-slate-900 to-slate-900 border-2 border-amber-500/70 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/30 rounded-2xl p-4 sm:p-5 space-y-3.5 transition-all group'
+          : 'search-result-card bg-slate-900 border border-slate-800 hover:border-indigo-600/60 rounded-2xl p-4 sm:p-5 space-y-3.5 transition-all shadow-md group';
+
+        const playBtnClasses = isKeyPlay
+          ? 'px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black shadow-md shadow-amber-500/30 flex items-center space-x-1.5 transition-all cursor-pointer'
+          : 'px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-all cursor-pointer';
+
+        return `
+          <div class="${cardClasses}">
+            
+            <!-- Result Top Bar: Video ID, Time, Tags -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b ${isKeyPlay ? 'border-amber-500/30' : 'border-slate-800/80'} pb-3">
+              <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                <span class="px-2 py-0.5 rounded-lg bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 text-[11px] font-mono font-medium flex items-center space-x-1">
+                  <svg class="w-3 h-3 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                  <span>${escapeHtml(videoId)}</span>
+                </span>
+                
+                <span class="px-2 py-0.5 rounded-lg ${isKeyPlay ? 'bg-amber-950/50 text-amber-200 border border-amber-500/40' : 'bg-slate-800 text-slate-300'} text-[11px] font-mono font-bold flex items-center space-x-1">
+                  <span>⏱️ ${timeFormatted}</span>
+                  <span class="${isKeyPlay ? 'text-amber-400' : 'text-slate-500'}">· Chunk #${chunkIdx}</span>
+                </span>
+
+                ${keyPlayPill}
+                ${scorePill}
+                ${playTypePill}
+              </div>
+
+              <!-- Quick Action Play Button -->
+              <div class="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onclick="playSearchResultSegment('${escapeHtml(videoId)}', ${startSec}, ${chunkIdx})"
+                  class="${playBtnClasses}"
+                >
+                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span>${isKeyPlay ? 'Play Key Play' : 'Play Segment'}</span>
+                </button>
+                <button
+                  type="button"
+                  onclick="inspectSearchResult('${escapeHtml(videoId)}', ${chunkIdx})"
+                  class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition-colors flex items-center space-x-1 cursor-pointer"
+                  title="View Video Metadata Inspector"
+                >
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <span class="hidden sm:inline">Inspect</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Matched Attribute Badge & Value Preview -->
+            <div class="space-y-2">
+              <div class="flex items-center space-x-2 text-xs">
+                <span class="font-mono ${isKeyPlay ? 'text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30' : 'text-indigo-400 font-semibold'}">${matchedKeyLabel}</span>
+              </div>
+              ${valuePreview}
+              ${extraSnippet}
+            </div>
+
+            <!-- Collapsible Segment Metadata JSON -->
+            <details class="text-[11px] pt-1">
+              <summary class="text-slate-500 hover:text-slate-300 cursor-pointer font-mono select-none">
+                { } View complete segment JSON
+              </summary>
+              <pre class="mt-2 p-3 bg-slate-950 rounded-xl border border-slate-800 text-slate-300 font-mono text-[11px] overflow-x-auto max-h-48 leading-relaxed">${escapeHtml(JSON.stringify(r.raw_chunk || r, null, 2))}</pre>
+            </details>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSearchResultsError(message) {
+      const body = document.getElementById('searchResultsModalBody');
+      const countBadge = document.getElementById('searchResultsCountBadge');
+      const footerStatus = document.getElementById('searchResultsFooterStatus');
+      if (countBadge) {
+        countBadge.textContent = 'Error';
+        countBadge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+      }
+      if (footerStatus) footerStatus.textContent = 'Search failed';
+      if (body) {
+        body.innerHTML = `
+          <div class="py-12 text-center space-y-3 bg-rose-950/20 border border-rose-800/40 rounded-2xl p-6">
+            <div class="w-12 h-12 mx-auto rounded-xl bg-rose-900/30 border border-rose-700/50 flex items-center justify-center text-rose-400">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h4 class="text-sm font-bold text-white">Search Error</h4>
+            <p class="text-xs text-rose-300 max-w-md mx-auto">${escapeHtml(message)}</p>
+            <button onclick="executeGlobalSearch()" class="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">
+              Retry Search
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    async function playSearchResultSegment(videoId, startSeconds, chunkIndex) {
+      closeSearchResultsModal();
+      await openVideoInspector(videoId);
+      setTimeout(() => {
+        seekVideoPlayer(startSeconds);
+        const card = document.getElementById(`chunkCard_${chunkIndex}`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('ring-2', 'ring-indigo-500');
+          setTimeout(() => card.classList.remove('ring-2', 'ring-indigo-500'), 3500);
+        }
+      }, 500);
+    }
+
+    async function inspectSearchResult(videoId, chunkIndex) {
+      closeSearchResultsModal();
+      await openVideoInspector(videoId);
+      setTimeout(() => {
+        const card = document.getElementById(`chunkCard_${chunkIndex}`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('ring-2', 'ring-indigo-500');
+          setTimeout(() => card.classList.remove('ring-2', 'ring-indigo-500'), 3500);
+        }
+      }, 500);
+    }
+
+    // Global keyboard shortcuts and search input listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('globalSearchInput');
+      const clearBtn = document.getElementById('clearSearchInputBtn');
+
+      if (searchInput && clearBtn) {
+        searchInput.addEventListener('input', () => {
+          if (searchInput.value.trim().length > 0) {
+            clearBtn.classList.remove('hidden');
+          } else {
+            clearBtn.classList.add('hidden');
+          }
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        } else if (e.key === 'Escape') {
+          closeSearchResultsModal();
+        }
+      });
+    });
   </script>
 </body>
 </html>

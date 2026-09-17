@@ -1,5 +1,8 @@
 """Pipeline Orchestrator for end-to-end video processing."""
 import shutil
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,7 +15,7 @@ from src.gemini_extractor import GeminiExtractor
 from src.logger import logger
 from src.storage_manager import StorageManager
 from src.video_probe import probe_video
-from src.video_segmenter import segment_video
+from src.video_segmenter import VideoChunk, segment_video
 
 
 class PipelineOrchestrator:
@@ -77,15 +80,17 @@ class PipelineOrchestrator:
     ) -> Dict[str, Any]:
         """Executes full extraction pipeline for a paired video and config."""
         pipeline_logs: List[Dict[str, Any]] = []
+        log_lock = threading.Lock()
 
         def log_step(level: str, msg: str, stage: str = "general") -> None:
             now_iso = datetime.now(timezone.utc).isoformat()
-            pipeline_logs.append({
-                "timestamp": now_iso,
-                "level": level,
-                "stage": stage,
-                "message": msg,
-            })
+            with log_lock:
+                pipeline_logs.append({
+                    "timestamp": now_iso,
+                    "level": level,
+                    "stage": stage,
+                    "message": msg,
+                })
             log_fn = getattr(logger, level.lower(), logger.info)
             log_fn(f"[{video_id}][{stage}] {msg}")
 
@@ -156,38 +161,148 @@ class PipelineOrchestrator:
 
             # 6. Extract metadata for each chunk via Vertex AI Gemini
             current_stage = "gemini_extraction"
-            log_step("INFO", f"Beginning Gemini metadata extraction across {len(chunks)} chunks with model={self.gemini_extractor.model_name}...", current_stage)
-            for idx, chunk in enumerate(chunks):
-                # Check if processing was stopped by user
+            total_chunks = len(chunks)
+            log_step("INFO", f"Beginning Gemini metadata extraction across {total_chunks} chunks with model={self.gemini_extractor.model_name}...", current_stage)
+
+            # Checkpoint / Resumability check: find already processed chunks in Firestore
+            existing_chunks = self.firestore_repo.get_video_chunks(video_id)
+            completed_indices = {
+                c.get("chunk_index")
+                for c in existing_chunks
+                if "chunk_index" in c and c.get("extracted_metadata")
+            }
+            if completed_indices:
+                log_step("INFO", f"Resuming video {video_id}: Found {len(completed_indices)} already completed chunks in Firestore. Skipping them.", current_stage)
+
+            chunks_to_process = [c for c in chunks if c.index not in completed_indices]
+            total_to_process = len(chunks_to_process)
+
+            if not chunks_to_process:
+                log_step("INFO", f"All {total_chunks} chunks are already completed in Firestore.", current_stage)
+            else:
+                concurrency = max(1, min(settings.max_concurrent_chunks, total_to_process))
+                log_step("INFO", f"Processing {total_to_process} chunks with concurrency={concurrency} workers (max_workers={settings.max_concurrent_chunks})...", current_stage)
+
+                stop_requested = threading.Event()
+                completed_counter = len(completed_indices)
+                failed_chunk_indices: List[int] = []
+                counter_lock = threading.Lock()
+                extraction_error: Optional[Exception] = None
+
+                def process_chunk_task(chunk: VideoChunk):
+                    nonlocal completed_counter, extraction_error
+                    if stop_requested.is_set():
+                        return
+
+                    # Periodically check if video processing was stopped by user
+                    if chunk.index % 5 == 0:
+                        rec = self.firestore_repo.get_video_record(video_id)
+                        if rec and rec.get("status") in ("STOPPED", "CANCELLED"):
+                            stop_requested.set()
+                            logger.warning(f"Aborting chunk worker for {video_id}: status={rec.get('status')}")
+                            return
+
+                    log_step("INFO", f"Extracting chunk {chunk.index + 1}/{total_chunks} ({chunk.start_time_seconds:.1f}s - {chunk.end_time_seconds:.1f}s)...", current_stage)
+                    last_exc = None
+                    for attempt in range(1, 4):
+                        try:
+                            chunk_metadata = self.gemini_extractor.extract_chunk_metadata(
+                                chunk=chunk,
+                                target_keys=target_metadata,
+                            )
+                            self.firestore_repo.save_chunk_metadata(
+                                video_id=video_id,
+                                chunk=chunk,
+                                extracted_metadata=chunk_metadata,
+                                model_version=getattr(self.gemini_extractor, "last_used_model", None) or self.gemini_extractor.model_name,
+                            )
+                            with counter_lock:
+                                completed_counter += 1
+                                log_step("INFO", f"Saved metadata for chunk {chunk.index} to Firestore ({completed_counter}/{total_chunks} completed)", current_stage)
+                                try:
+                                    self.firestore_repo.update_video_progress(video_id, completed_counter, total_chunks)
+                                except Exception:
+                                    pass
+                            last_exc = None
+                            break
+                        except Exception as e:
+                            last_exc = e
+                            if attempt < 3:
+                                logger.warning(f"Chunk {chunk.index} attempt {attempt} failed ({e}), retrying in {attempt}s...")
+                                time.sleep(attempt * 1.0)
+                            else:
+                                logger.warning(
+                                    f"Chunk {chunk.index} failed extraction after 3 attempts ({e}). "
+                                    "Recording placeholder metadata so pipeline can proceed."
+                                )
+                                fallback_meta = {k: None for k in target_metadata}
+                                fallback_meta.update({
+                                    "scene_description": f"Metadata extraction failed: {e}",
+                                    "chunk_summary": f"Extraction error: {e}",
+                                    "overall_sentiment": "Neutral",
+                                    "sports_key_plays": [],
+                                    "safety_flags": [],
+                                    "extraction_error": str(e),
+                                })
+                                try:
+                                    self.firestore_repo.save_chunk_metadata(
+                                        video_id=video_id,
+                                        chunk=chunk,
+                                        extracted_metadata=fallback_meta,
+                                        model_version="error_placeholder",
+                                    )
+                                    with counter_lock:
+                                        completed_counter += 1
+                                        failed_chunk_indices.append(chunk.index)
+                                        log_step("WARNING", f"Chunk {chunk.index} saved with fallback placeholder metadata after 3 attempts ({completed_counter}/{total_chunks} completed)", current_stage)
+                                        try:
+                                            self.firestore_repo.update_video_progress(video_id, completed_counter, total_chunks)
+                                        except Exception:
+                                            pass
+                                    last_exc = None
+                                    break
+                                except Exception as save_err:
+                                    logger.error(f"Failed to save fallback metadata for chunk {chunk.index}: {save_err}")
+                                    with counter_lock:
+                                        if extraction_error is None:
+                                            extraction_error = e
+                                    raise e
+
+                with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                    future_map = {executor.submit(process_chunk_task, chunk): chunk for chunk in chunks_to_process}
+                    for future in as_completed(future_map):
+                        try:
+                            future.result()
+                        except Exception as exc:
+                            if not extraction_error:
+                                extraction_error = exc
+
+                # Check if pipeline was stopped by user
                 current_rec = self.firestore_repo.get_video_record(video_id)
-                if current_rec and current_rec.get("status") in ("STOPPED", "CANCELLED"):
-                    log_step("WARNING", f"Pipeline halted by user request at chunk {idx + 1}/{len(chunks)}", current_stage)
-                    logger.warning(f"Aborting pipeline for {video_id}: status={current_rec.get('status')}")
+                if (current_rec and current_rec.get("status") in ("STOPPED", "CANCELLED")) or stop_requested.is_set():
+                    status_str = current_rec.get("status") if current_rec else "STOPPED"
+                    log_step("WARNING", f"Pipeline halted by user request ({status_str})", current_stage)
+                    logger.warning(f"Aborting pipeline for {video_id}: status={status_str}")
                     return {
-                        "status": current_rec.get("status"),
+                        "status": status_str,
                         "video_id": video_id,
-                        "processed_chunks": idx,
-                        "total_chunks": len(chunks),
+                        "processed_chunks": completed_counter,
+                        "total_chunks": total_chunks,
                         "logs": pipeline_logs,
                     }
 
-                log_step("INFO", f"Extracting chunk {chunk.index + 1}/{len(chunks)} ({chunk.start_time_seconds:.1f}s - {chunk.end_time_seconds:.1f}s)...", current_stage)
-                chunk_metadata = self.gemini_extractor.extract_chunk_metadata(
-                    chunk=chunk,
-                    target_keys=target_metadata,
-                )
-                self.firestore_repo.save_chunk_metadata(
-                    video_id=video_id,
-                    chunk=chunk,
-                    extracted_metadata=chunk_metadata,
-                    model_version=self.gemini_extractor.model_name,
-                )
-                log_step("INFO", f"Saved metadata for chunk {chunk.index} to Firestore subcollection", current_stage)
+                if len(failed_chunk_indices) > max(10, int(total_chunks * 0.25)):
+                    raise GeminiExtractionError(
+                        f"{len(failed_chunk_indices)}/{total_chunks} chunks failed extraction: {failed_chunk_indices[:10]}"
+                    )
+
+                if extraction_error:
+                    raise extraction_error
 
             # 7. Complete video processing in Firestore
             current_stage = "completion"
             log_step("INFO", f"Marking video={video_id} as COMPLETED in Firestore", current_stage)
-            self.firestore_repo.complete_video_processing(video_id)
+            self.firestore_repo.complete_video_processing(video_id, total_chunks=len(chunks))
 
             log_step("INFO", f"Pipeline completed successfully for {video_id} ({len(chunks)} chunks, {probe_info.duration:.1f}s)", current_stage)
             return {

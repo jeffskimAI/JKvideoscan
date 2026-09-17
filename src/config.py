@@ -45,11 +45,23 @@ class Settings(BaseSettings):
     firestore_collection: str = Field(default="videos")
 
     # Vertex AI Gemini Configuration
-    gemini_model: str = Field(default="gemini-3.8")
+    gemini_model: str = Field(default="gemini-3.8-flash", description="Primary Gemini model")
+    gemini_location: str = Field(default="global", description="Vertex AI location for Gemini models")
+    gemini_fallback_models: list[str] = Field(
+        default=[
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.25-flash",
+            "gemini-2.5-flash",
+        ],
+        description="Cascading fallback model chain in descending priority order",
+    )
 
     # Video Processing Parameters
     chunk_duration_seconds: int = Field(default=10, description="Strict 10-second chunking")
-    max_concurrent_chunks: int = Field(default=4, description="Maximum parallel Gemini inferences")
+    max_concurrent_chunks: int = Field(default=35, description="Maximum parallel Gemini inferences")
     temp_dir: str = Field(default="/tmp/videoprocessing")
 
     # Authentication
