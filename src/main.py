@@ -381,11 +381,28 @@ async def upload_video_and_config(
         )
 
     # 3. Read video contents
-    video_bytes = await video.read()
+    try:
+        video_bytes = await video.read()
+    except Exception as e:
+        logger.error(f"Failed to read uploaded video stream: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read video stream: {e}",
+        )
+
     if not video_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded video file is empty.",
+        )
+
+    # 32MB limit check (Cloud Run GFE payload limit)
+    max_bytes = 32 * 1024 * 1024
+    if len(video_bytes) > max_bytes:
+        size_mb = len(video_bytes) / (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Uploaded file size ({size_mb:.1f} MB) exceeds Cloud Run's 32 MB HTTP request limit. Please use videos under 32 MB for direct upload, or upload larger files directly to gs://{settings.gcs_bucket}.",
         )
 
     # 4. Upload config and video to Google Cloud Storage
@@ -393,22 +410,30 @@ async def upload_video_and_config(
     video_object = f"{clean_id}.mp4"
     config_object = f"{clean_id}_config.json"
 
-    # Upload config first
-    logger.info(f"Uploading config to gs://{bucket_name}/{config_object}")
-    orchestrator.storage_manager.upload_json(
-        bucket_name=bucket_name,
-        object_name=config_object,
-        data={"target_metadata": validated_metadata},
-    )
+    try:
+        # Upload config first
+        logger.info(f"Uploading config to gs://{bucket_name}/{config_object}")
+        orchestrator.storage_manager.upload_json(
+            bucket_name=bucket_name,
+            object_name=config_object,
+            data={"target_metadata": validated_metadata},
+        )
 
-    # Upload video
-    logger.info(f"Uploading video ({len(video_bytes)} bytes) to gs://{bucket_name}/{video_object}")
-    orchestrator.storage_manager.upload_file(
-        bucket_name=bucket_name,
-        object_name=video_object,
-        data=video_bytes,
-        content_type=video.content_type or "video/mp4",
-    )
+        # Upload video
+        logger.info(f"Uploading video ({len(video_bytes)} bytes) to gs://{bucket_name}/{video_object}")
+        orchestrator.storage_manager.upload_file(
+            bucket_name=bucket_name,
+            object_name=video_object,
+            data=video_bytes,
+            content_type=video.content_type or "video/mp4",
+        )
+    except Exception as e:
+        err_info = describe_error(e, stage="gcs_upload", context={"bucket": bucket_name, "object": video_object})
+        logger.error(f"GCS upload failed for {clean_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload video to Cloud Storage: {e}. {err_info['description']}",
+        )
 
     # Immediately initialize the Firestore document with status "PROCESSING"
     # so that My Library and Metadata Results immediately reflect

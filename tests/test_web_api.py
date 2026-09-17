@@ -309,6 +309,24 @@ def test_api_upload_validation_error(client):
     assert "Unsupported metadata keys requested" in res.json()["detail"]
 
 
+def test_api_upload_oversized_file(client):
+    """Test that videos exceeding 32MB are rejected with HTTP 413."""
+    oversized_bytes = b"x" * (33 * 1024 * 1024)  # 33 MB
+    config_json = json.dumps({
+        "target_metadata": ["scene_description"]
+    })
+    files = {
+        "video": ("large.mp4", io.BytesIO(oversized_bytes), "video/mp4"),
+    }
+    data = {
+        "config_json": config_json,
+    }
+
+    res = client.post("/api/upload", files=files, data=data)
+    assert res.status_code == 413
+    assert "exceeds Cloud Run's 32 MB HTTP request limit" in res.json()["detail"]
+
+
 def test_api_delete_video(client):
     """Test deleting a video from Firestore via API."""
     mock_db = MockFirestoreClient()

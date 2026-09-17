@@ -298,7 +298,7 @@
                   </div>
                   <div>
                     <p class="text-sm font-medium text-slate-200">Click to choose or drag & drop video</p>
-                    <p class="text-xs text-slate-500 mt-1">MP4, MOV, MKV, WebM (up to 500MB)</p>
+                    <p class="text-xs text-slate-500 mt-1">MP4, MOV, MKV, WebM (up to 32MB direct upload)</p>
                   </div>
                 </div>
 
@@ -323,6 +323,7 @@
                       </svg>
                     </button>
                   </div>
+                  <div id="videoSizeWarning" class="hidden text-xs p-2.5 rounded-lg bg-amber-950/60 border border-amber-800 text-amber-300 space-y-1"></div>
                   <video id="videoLocalPreview" controls class="w-full rounded-lg bg-black max-h-48 mt-2"></video>
                 </div>
               </div>
@@ -1324,7 +1325,17 @@
       document.getElementById('videoDropzoneEmpty').classList.add('hidden');
       document.getElementById('videoSelectedCard').classList.remove('hidden');
       document.getElementById('videoFileName').textContent = file.name;
-      document.getElementById('videoFileSize').textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+      const sizeMb = file.size / (1024 * 1024);
+      document.getElementById('videoFileSize').textContent = sizeMb.toFixed(2) + ' MB';
+
+      // Check Cloud Run 32MB payload limit
+      const warningEl = document.getElementById('videoSizeWarning');
+      if (file.size > 32 * 1024 * 1024) {
+        warningEl.innerHTML = `<div class="font-medium text-amber-200">⚠️ File Exceeds 32 MB Cloud Run Limit (${sizeMb.toFixed(1)} MB)</div><p class="text-amber-300/80 mt-0.5">Google Cloud Run limits direct HTTP request bodies to 32 MB. Direct uploads over 32 MB will be rejected with HTTP 413. Please use a video clip under 32 MB, or upload larger videos directly to <code>gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'}</code>.</p>`;
+        warningEl.classList.remove('hidden');
+      } else {
+        warningEl.classList.add('hidden');
+      }
 
       // Auto-populate video ID
       const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
@@ -1345,6 +1356,8 @@
       document.getElementById('videoFileInput').value = '';
       document.getElementById('videoDropzoneEmpty').classList.remove('hidden');
       document.getElementById('videoSelectedCard').classList.add('hidden');
+      const warningEl = document.getElementById('videoSizeWarning');
+      if (warningEl) warningEl.classList.add('hidden');
       const preview = document.getElementById('videoLocalPreview');
       preview.pause();
       preview.removeAttribute('src');
@@ -1448,8 +1461,23 @@
       const descLabel = document.getElementById('uploadStatusDesc');
       const submitBtn = document.getElementById('btnSubmitUpload');
 
+      // Check Cloud Run 32MB payload limit before sending
+      const maxBytes = 32 * 1024 * 1024;
+      if (selectedVideoFile.size > maxBytes) {
+        const sizeMb = (selectedVideoFile.size / (1024 * 1024)).toFixed(1);
+        statusBox.classList.remove('hidden');
+        titleLabel.textContent = 'Upload Blocked: File Exceeds 32 MB Limit';
+        descLabel.textContent = `Google Cloud Run has a strict 32 MB maximum limit on direct HTTP uploads. Your file is ${sizeMb} MB. Please select a video under 32 MB, or upload larger videos directly to gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'} via gcloud storage.`;
+        percentLabel.textContent = 'Blocked';
+        progressBar.style.backgroundColor = '#f43f5e';
+        progressBar.style.width = '100%';
+        submitBtn.disabled = false;
+        return;
+      }
+
       statusBox.classList.remove('hidden');
       submitBtn.disabled = true;
+      progressBar.style.backgroundColor = '#6366f1';
       progressBar.style.width = '10%';
       percentLabel.textContent = '10%';
       titleLabel.textContent = 'Uploading to Google Cloud Storage...';
@@ -1511,14 +1539,32 @@
         } else if (xhr.status === 401) {
           setAuthToken(null);
           showAuthGate('Session expired. Please re-enter the password.');
+        } else if (xhr.status === 413) {
+          titleLabel.textContent = 'Upload Failed: File Exceeds 32 MB Limit (HTTP 413)';
+          descLabel.textContent = `Google Cloud Run rejected the upload because it exceeds the 32 MB direct HTTP request body limit. Your file is ${(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB. Please choose a video under 32 MB, or upload directly to gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'}.`;
+          percentLabel.textContent = '413';
+          progressBar.style.backgroundColor = '#f43f5e';
+          progressBar.style.width = '100%';
         } else {
-          let errDetail = xhr.statusText;
+          let errDetail = '';
           let errDesc = '';
           try {
             const err = JSON.parse(xhr.responseText);
-            errDetail = err.detail || err.error || errDetail;
+            errDetail = err.detail || err.error || '';
             errDesc = err.error_description || '';
-          } catch (_) {}
+          } catch (_) {
+            if (xhr.responseText) {
+              const titleMatch = xhr.responseText.match(/<title>(.*?)<\/title>/i);
+              if (titleMatch && titleMatch[1]) {
+                errDetail = titleMatch[1].trim();
+              } else {
+                errDetail = xhr.responseText.trim().substring(0, 120);
+              }
+            }
+          }
+          if (!errDetail || !errDetail.trim()) {
+            errDetail = xhr.statusText ? xhr.statusText : `HTTP ${xhr.status} Request Failed`;
+          }
           titleLabel.textContent = 'Upload / Validation Failed: ' + errDetail;
           descLabel.textContent = errDesc ? (errDesc + ' Check Live Logs for detailed stack trace.') : (errDetail + '. Check Live Logs for details.');
           percentLabel.textContent = 'Failed';
