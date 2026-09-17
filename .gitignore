@@ -13,3 +13,4 @@ tmp/
 chunks/
 *.log
 .env
+*.png
