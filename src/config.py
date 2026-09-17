@@ -37,6 +37,10 @@ class Settings(BaseSettings):
 
     # Cloud Storage & Firestore
     gcs_bucket: str = Field(default="jeffsvideoscan-ingest")
+    service_account_email: str = Field(
+        default="jeffsvideoscan-sa@jeffskim999.iam.gserviceaccount.com",
+        description="Service account email used for signing GCS V4 URLs",
+    )
     firestore_database: str = Field(default="(default)")
     firestore_collection: str = Field(default="videos")
 

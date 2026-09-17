@@ -478,6 +478,167 @@ async def upload_video_and_config(
     }
 
 
+class SignedUrlRequest(BaseModel):
+    video_id: Optional[str] = None
+    filename: Optional[str] = None
+    content_type: Optional[str] = None
+    target_metadata: Optional[List[str]] = None
+    config_dict: Optional[Dict[str, Any]] = None
+
+
+class UploadCompleteRequest(BaseModel):
+    video_id: str
+    run_pipeline: bool = True
+
+
+@app.post("/api/upload/signed-url", dependencies=[Depends(require_auth)])
+async def create_signed_upload_url(payload: SignedUrlRequest):
+    """Generates a V4 Signed URL for direct client-to-GCS video upload.
+
+    Bypasses Cloud Run's 32 MB HTTP request payload limit completely,
+    allowing videos of any size to be uploaded directly into Google Cloud Storage.
+    """
+    raw_id = (payload.video_id or "").strip()
+    if not raw_id:
+        raw_id = Path(payload.filename or "video").stem
+
+    clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", raw_id).strip("_").lower()
+    if not clean_id:
+        clean_id = f"video_{int(time.time())}"
+
+    # Determine target metadata configuration
+    if payload.config_dict:
+        config_dict = payload.config_dict
+    elif payload.target_metadata:
+        config_dict = {"target_metadata": payload.target_metadata}
+    else:
+        config_dict = {
+            "target_metadata": [
+                "chunk_summary",
+                "scene_description",
+                "detected_objects",
+                "overall_sentiment",
+            ]
+        }
+
+    try:
+        validated_metadata = parse_config_payload(config_dict)
+    except Exception as e:
+        err_info = describe_error(e, stage="config_validation")
+        logger.error(f"Configuration validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Configuration validation error: {e}. {err_info['description']}",
+        )
+
+    bucket_name = settings.gcs_bucket
+    video_object = f"{clean_id}.mp4"
+    config_object = f"{clean_id}_config.json"
+
+    # Upload config to GCS
+    try:
+        logger.info(f"Uploading config to gs://{bucket_name}/{config_object}")
+        orchestrator.storage_manager.upload_json(
+            bucket_name=bucket_name,
+            object_name=config_object,
+            data={"target_metadata": validated_metadata},
+        )
+    except Exception as e:
+        err_info = describe_error(e, stage="gcs_upload", context={"bucket": bucket_name, "object": config_object})
+        logger.error(f"Failed to upload config to GCS for {clean_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload configuration to Cloud Storage: {e}. {err_info['description']}",
+        )
+
+    # Initialize Firestore record with status "PROCESSING"
+    try:
+        orchestrator.firestore_repo.init_video_record(
+            video_id=clean_id,
+            filename=Path(payload.filename or video_object).name,
+            gcs_bucket=bucket_name,
+            gcs_path=video_object,
+            config_path=config_object,
+            target_metadata=validated_metadata,
+            total_chunks=0,
+            duration_seconds=0.0,
+        )
+        logger.info(f"Initialized Firestore record for {clean_id} with status PROCESSING")
+    except Exception as e:
+        logger.warning(f"Could not initialize Firestore record for {clean_id}: {e}")
+
+    # Generate V4 Signed URL
+    try:
+        signed_url = orchestrator.storage_manager.generate_signed_upload_url(
+            bucket_name=bucket_name,
+            object_name=video_object,
+            content_type=payload.content_type,
+            expiration_minutes=60,
+        )
+    except Exception as e:
+        err_info = describe_error(e, stage="signed_url_generation", context={"bucket": bucket_name, "object": video_object})
+        logger.error(f"Failed to generate signed URL for {clean_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate Google Cloud Storage Signed URL: {e}. {err_info['description']}",
+        )
+
+    return {
+        "video_id": clean_id,
+        "signed_url": signed_url,
+        "gcs_uri": f"gs://{bucket_name}/{video_object}",
+        "gcs_bucket": bucket_name,
+        "video_object": video_object,
+        "config_object": config_object,
+        "target_metadata": validated_metadata,
+    }
+
+
+@app.post("/api/upload/complete", dependencies=[Depends(require_auth)])
+async def complete_signed_upload(
+    payload: UploadCompleteRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Finalizes a direct-to-GCS upload, verifies object existence, and triggers the pipeline."""
+    clean_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", payload.video_id.strip()).strip("_").lower()
+    bucket_name = settings.gcs_bucket
+    video_object = f"{clean_id}.mp4"
+    config_object = f"{clean_id}_config.json"
+
+    # Verify that the video exists in GCS
+    try:
+        exists = orchestrator.storage_manager.check_blob_exists(bucket_name, video_object)
+    except Exception as e:
+        logger.error(f"Error checking blob existence for {video_object}: {e}")
+        exists = True  # Proceed cautiously if check errors
+
+    if not exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video file {video_object} was not found in bucket {bucket_name}. The direct upload may have failed or was cancelled.",
+        )
+
+    # Trigger background pipeline if requested
+    if payload.run_pipeline:
+        logger.info(f"Adding background pipeline execution for video {clean_id}")
+        background_tasks.add_task(
+            orchestrator.execute_video_pipeline,
+            bucket_name=bucket_name,
+            video_id=clean_id,
+            video_object=video_object,
+            config_object=config_object,
+            force=True,
+        )
+
+    return {
+        "status": "PROCESSING",
+        "video_id": clean_id,
+        "gcs_uri": f"gs://{bucket_name}/{video_object}",
+        "message": f"Upload verified in GCS. Pipeline processing initiated for {clean_id}.",
+    }
+
+
+
 @app.post("/api/videos/{video_id}/process", dependencies=[Depends(require_auth)])
 async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks):
     """Triggers or forces re-processing of a video currently in GCS."""

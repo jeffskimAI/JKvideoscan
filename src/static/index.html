@@ -298,7 +298,7 @@
                   </div>
                   <div>
                     <p class="text-sm font-medium text-slate-200">Click to choose or drag & drop video</p>
-                    <p class="text-xs text-slate-500 mt-1">MP4, MOV, MKV, WebM (up to 32MB direct upload)</p>
+                    <p class="text-xs text-slate-400 mt-1">MP4, MOV, MKV, WebM &bull; Direct GCS V4 Signed URL (Any File Size)</p>
                   </div>
                 </div>
 
@@ -1328,14 +1328,15 @@
       const sizeMb = file.size / (1024 * 1024);
       document.getElementById('videoFileSize').textContent = sizeMb.toFixed(2) + ' MB';
 
-      // Check Cloud Run 32MB payload limit
+      // Direct GCS V4 Signed URL confirmation badge
       const warningEl = document.getElementById('videoSizeWarning');
-      if (file.size > 32 * 1024 * 1024) {
-        warningEl.innerHTML = `<div class="font-medium text-amber-200">⚠️ File Exceeds 32 MB Cloud Run Limit (${sizeMb.toFixed(1)} MB)</div><p class="text-amber-300/80 mt-0.5">Google Cloud Run limits direct HTTP request bodies to 32 MB. Direct uploads over 32 MB will be rejected with HTTP 413. Please use a video clip under 32 MB, or upload larger videos directly to <code>gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'}</code>.</p>`;
-        warningEl.classList.remove('hidden');
-      } else {
-        warningEl.classList.add('hidden');
-      }
+      warningEl.className = "text-xs p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-800 text-emerald-300 space-y-1";
+      warningEl.innerHTML = `<div class="flex items-center space-x-1.5 font-medium text-emerald-200">
+        <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        <span>Direct Cloud Storage Signed URL (${sizeMb.toFixed(1)} MB)</span>
+      </div>
+      <p class="text-emerald-300/80">File will upload directly to Google Cloud Storage via V4 Signed URL, bypassing Cloud Run proxy limits completely.</p>`;
+      warningEl.classList.remove('hidden');
 
       // Auto-populate video ID
       const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
@@ -1446,11 +1447,26 @@
         if (selectedMetadataKeys.size === 0) {
           alert('Please select at least one metadata attribute in the builder.');
           return;
+      // Check configuration
+      let targetMetadataArray = null;
+      let configDict = null;
+      if (configMode === 'builder') {
+        if (selectedMetadataKeys.size === 0) {
+          alert('Please select at least one metadata attribute in the builder.');
+          return;
         }
-        configJsonStr = JSON.stringify({ target_metadata: Array.from(selectedMetadataKeys) });
+        targetMetadataArray = Array.from(selectedMetadataKeys);
       } else if (!selectedConfigFile) {
         alert('Please upload a .json configuration file or switch to Interactive Builder.');
         return;
+      } else {
+        try {
+          const fileText = await selectedConfigFile.text();
+          configDict = JSON.parse(fileText);
+        } catch (e) {
+          alert('Failed to parse config JSON file: ' + e.message);
+          return;
+        }
       }
 
       // Show Progress Modal
@@ -1461,112 +1477,151 @@
       const descLabel = document.getElementById('uploadStatusDesc');
       const submitBtn = document.getElementById('btnSubmitUpload');
 
-      // Check Cloud Run 32MB payload limit before sending
-      const maxBytes = 32 * 1024 * 1024;
-      if (selectedVideoFile.size > maxBytes) {
-        const sizeMb = (selectedVideoFile.size / (1024 * 1024)).toFixed(1);
-        statusBox.classList.remove('hidden');
-        titleLabel.textContent = 'Upload Blocked: File Exceeds 32 MB Limit';
-        descLabel.textContent = `Google Cloud Run has a strict 32 MB maximum limit on direct HTTP uploads. Your file is ${sizeMb} MB. Please select a video under 32 MB, or upload larger videos directly to gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'} via gcloud storage.`;
-        percentLabel.textContent = 'Blocked';
-        progressBar.style.backgroundColor = '#f43f5e';
-        progressBar.style.width = '100%';
-        submitBtn.disabled = false;
-        return;
-      }
-
       statusBox.classList.remove('hidden');
       submitBtn.disabled = true;
       progressBar.style.backgroundColor = '#6366f1';
       progressBar.style.width = '10%';
       percentLabel.textContent = '10%';
-      titleLabel.textContent = 'Uploading to Google Cloud Storage...';
-      descLabel.textContent = `Streaming ${selectedVideoFile.name} and configuration to gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'}...`;
+      titleLabel.textContent = 'Requesting GCS Signed URL...';
+      const sizeMb = (selectedVideoFile.size / (1024 * 1024)).toFixed(1);
+      descLabel.textContent = `Preparing direct Google Cloud Storage upload channel for ${selectedVideoFile.name} (${sizeMb} MB)...`;
 
-      const formData = new FormData();
-      formData.append('video', selectedVideoFile);
-      formData.append('video_id', videoId);
-      formData.append('run_pipeline', 'true');
-
-      if (configMode === 'file' && selectedConfigFile) {
-        formData.append('config_file', selectedConfigFile);
-      } else if (configJsonStr) {
-        formData.append('config_json', configJsonStr);
-      }
-
-      // Use XMLHttpRequest for precise upload progress tracking
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/upload', true);
       const token = getAuthToken();
-      if (token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      // Step 1: Request V4 Signed URL from Cloud Run backend
+      let signedData = null;
+      try {
+        const reqPayload = {
+          video_id: videoId,
+          filename: selectedVideoFile.name,
+          content_type: selectedVideoFile.type || 'video/mp4',
+        };
+        if (targetMetadataArray) {
+          reqPayload.target_metadata = targetMetadataArray;
+        }
+        if (configDict) {
+          reqPayload.config_dict = configDict;
+        }
+
+        const urlRes = await fetch('/api/upload/signed-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(reqPayload)
+        });
+
+        if (urlRes.status === 401) {
+          setAuthToken(null);
+          showAuthGate('Session expired. Please re-enter the password.');
+          submitBtn.disabled = false;
+          statusBox.classList.add('hidden');
+          return;
+        }
+
+        if (!urlRes.ok) {
+          let errDetail = urlRes.statusText;
+          try {
+            const err = await urlRes.json();
+            errDetail = err.detail || err.error || errDetail;
+          } catch (_) {}
+          throw new Error(errDetail || 'Failed to generate signed upload URL');
+        }
+
+        signedData = await urlRes.json();
+      } catch (err) {
+        submitBtn.disabled = false;
+        titleLabel.textContent = 'Upload Initialization Failed';
+        descLabel.textContent = err.message + '. Check Live Logs for details.';
+        percentLabel.textContent = 'Failed';
+        progressBar.style.backgroundColor = '#f43f5e';
+        progressBar.style.width = '100%';
+        return;
       }
-      xhr.withCredentials = true;
+
+      currentVideoId = signedData.video_id;
+      titleLabel.textContent = 'Uploading Directly to Google Cloud Storage...';
+      descLabel.textContent = `Streaming ${selectedVideoFile.name} (${sizeMb} MB) directly to gs://${signedData.gcs_bucket}/${signedData.video_object}...`;
+      progressBar.style.width = '15%';
+      percentLabel.textContent = '15%';
+
+      // Step 2: Stream Video File Directly to GCS via HTTP PUT (bypassing Cloud Run proxy limits)
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', signedData.signed_url, true);
+      const uploadContentType = selectedVideoFile.type || 'video/mp4';
+      xhr.setRequestHeader('Content-Type', uploadContentType);
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 80) + 10;
+          const pct = Math.round((e.loaded / e.total) * 75) + 15;
           progressBar.style.width = pct + '%';
           percentLabel.textContent = pct + '%';
         }
       };
 
       xhr.onload = async () => {
-        submitBtn.disabled = false;
         if (xhr.status >= 200 && xhr.status < 300) {
-          progressBar.style.width = '100%';
-          percentLabel.textContent = '100%';
-          titleLabel.textContent = 'Uploaded Successfully!';
-          descLabel.textContent = 'Files stored in GCS. Pipeline processing has started. Redirecting to Metadata Results...';
+          progressBar.style.width = '92%';
+          percentLabel.textContent = '92%';
+          titleLabel.textContent = 'Upload Verified! Starting Gemini Analysis...';
+          descLabel.textContent = 'File successfully received by GCS. Launching video segmenter and Vertex AI pipeline...';
 
-          const resp = JSON.parse(xhr.responseText);
-          currentVideoId = resp.video_id;
-
-          // Clear inspector tab immediately and show PROCESSING to match Firestore library
-          clearInspectorTab(resp.video_id, 'PROCESSING', {
-            gcs_uri: resp.gcs_uri,
-            target_metadata: resp.target_metadata
-          });
-
-          setTimeout(() => {
-            statusBox.classList.add('hidden');
-            progressBar.style.width = '0%';
-            openVideoInspector(resp.video_id, 'PROCESSING', {
-              gcs_uri: resp.gcs_uri,
-              target_metadata: resp.target_metadata
-            });
-          }, 1200);
-        } else if (xhr.status === 401) {
-          setAuthToken(null);
-          showAuthGate('Session expired. Please re-enter the password.');
-        } else if (xhr.status === 413) {
-          titleLabel.textContent = 'Upload Failed: File Exceeds 32 MB Limit (HTTP 413)';
-          descLabel.textContent = `Google Cloud Run rejected the upload because it exceeds the 32 MB direct HTTP request body limit. Your file is ${(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB. Please choose a video under 32 MB, or upload directly to gs://${appInfo.gcs_bucket || 'jeffsvideoscan-ingest'}.`;
-          percentLabel.textContent = '413';
-          progressBar.style.backgroundColor = '#f43f5e';
-          progressBar.style.width = '100%';
-        } else {
-          let errDetail = '';
-          let errDesc = '';
+          // Step 3: Finalize upload with Backend and Trigger Pipeline
           try {
-            const err = JSON.parse(xhr.responseText);
-            errDetail = err.detail || err.error || '';
-            errDesc = err.error_description || '';
-          } catch (_) {
-            if (xhr.responseText) {
-              const titleMatch = xhr.responseText.match(/<title>(.*?)<\/title>/i);
-              if (titleMatch && titleMatch[1]) {
-                errDetail = titleMatch[1].trim();
-              } else {
-                errDetail = xhr.responseText.trim().substring(0, 120);
-              }
+            const compRes = await fetch('/api/upload/complete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({
+                video_id: currentVideoId,
+                run_pipeline: true
+              })
+            });
+
+            if (!compRes.ok) {
+              const err = await compRes.json();
+              throw new Error(err.detail || 'Pipeline launch confirmation failed');
             }
+
+            progressBar.style.width = '100%';
+            percentLabel.textContent = '100%';
+            titleLabel.textContent = 'Uploaded Successfully!';
+            descLabel.textContent = 'Direct GCS upload complete. Pipeline processing is running. Redirecting to Metadata Results...';
+
+            // Clear inspector tab immediately and show PROCESSING to match Firestore library
+            clearInspectorTab(currentVideoId, 'PROCESSING', {
+              gcs_uri: signedData.gcs_uri,
+              target_metadata: signedData.target_metadata
+            });
+
+            setTimeout(() => {
+              statusBox.classList.add('hidden');
+              progressBar.style.width = '0%';
+              openVideoInspector(currentVideoId, 'PROCESSING', {
+                gcs_uri: signedData.gcs_uri,
+                target_metadata: signedData.target_metadata
+              });
+            }, 1000);
+          } catch (compErr) {
+            submitBtn.disabled = false;
+            titleLabel.textContent = 'Pipeline Trigger Failed';
+            descLabel.textContent = compErr.message + '. You can re-trigger processing from My Library.';
+            percentLabel.textContent = 'Failed';
+            progressBar.style.backgroundColor = '#f43f5e';
+            progressBar.style.width = '100%';
           }
-          if (!errDetail || !errDetail.trim()) {
-            errDetail = xhr.statusText ? xhr.statusText : `HTTP ${xhr.status} Request Failed`;
+        } else {
+          submitBtn.disabled = false;
+          let gcsErr = `GCS returned HTTP ${xhr.status} ${xhr.statusText}`;
+          if (xhr.responseText) {
+            const match = xhr.responseText.match(/<Message>(.*?)<\/Message>/i);
+            if (match && match[1]) gcsErr = match[1];
           }
-          titleLabel.textContent = 'Upload / Validation Failed: ' + errDetail;
-          descLabel.textContent = errDesc ? (errDesc + ' Check Live Logs for detailed stack trace.') : (errDetail + '. Check Live Logs for details.');
+          titleLabel.textContent = 'Direct Storage Upload Failed';
+          descLabel.textContent = `${gcsErr}. Check Live Logs or verify GCS bucket CORS settings.`;
           percentLabel.textContent = 'Failed';
           progressBar.style.backgroundColor = '#f43f5e';
           progressBar.style.width = '100%';
@@ -1575,14 +1630,14 @@
 
       xhr.onerror = () => {
         submitBtn.disabled = false;
-        titleLabel.textContent = 'Upload Connection Error';
-        descLabel.textContent = 'Failed to connect to the server. Check your network connection or verify Cloud Run service status in Live Logs.';
+        titleLabel.textContent = 'Storage Connection Error';
+        descLabel.textContent = 'Failed to connect to Google Cloud Storage. Check network connection or bucket CORS configuration.';
         percentLabel.textContent = 'Failed';
         progressBar.style.backgroundColor = '#f43f5e';
         progressBar.style.width = '100%';
       };
 
-      xhr.send(formData);
+      xhr.send(selectedVideoFile);
     }
 
     // Fetch Videos List from Firestore

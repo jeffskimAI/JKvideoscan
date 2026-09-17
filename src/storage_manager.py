@@ -129,3 +129,72 @@ class StorageManager:
         blob = bucket.blob(object_name)
         return blob.download_as_bytes(start=start, end=end)
 
+    def generate_signed_upload_url(
+        self,
+        bucket_name: str,
+        object_name: str,
+        content_type: str = "video/mp4",
+        expiration_minutes: int = 60,
+    ) -> str:
+        """Generates a V4 Signed URL for uploading directly to GCS via HTTP PUT.
+
+        Uses IAM Credentials API (SignBlob) under the hood when running in environments
+        without a local private key file (e.g. Google Cloud Run).
+        """
+        import datetime
+        import subprocess
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+
+        # 1. First try credentials attached to client
+        creds = getattr(self.client, "_credentials", None)
+        token = None
+        sa_email = None
+
+        if creds:
+            try:
+                if not getattr(creds, "valid", False):
+                    creds.refresh(Request())
+                token = getattr(creds, "token", None)
+                sa_email = getattr(creds, "service_account_email", None)
+            except Exception as e:
+                logger.debug(f"Client credentials refresh for signed URL: {e}")
+
+        # 2. If not found or incomplete, check google.auth.default()
+        if not token or not sa_email:
+            try:
+                default_creds, _ = google.auth.default()
+                default_creds.refresh(Request())
+                token = token or getattr(default_creds, "token", None)
+                sa_email = sa_email or getattr(default_creds, "service_account_email", None)
+            except Exception as e:
+                logger.debug(f"Default credentials check for signed URL: {e}")
+
+        # 3. Fallback to settings and local gcloud access token
+        if not sa_email:
+            sa_email = settings.service_account_email
+        if not token:
+            try:
+                token = subprocess.check_output(
+                    ["gcloud", "auth", "print-access-token"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                ).decode().strip()
+            except Exception as e:
+                logger.debug(f"gcloud token fallback for signed URL: {e}")
+
+        logger.info(f"Generating V4 Signed Upload URL for gs://{bucket_name}/{object_name} (sa={sa_email})")
+
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=expiration_minutes),
+            method="PUT",
+            content_type=content_type,
+            service_account_email=sa_email,
+            access_token=token,
+        )
+
+

@@ -95,7 +95,15 @@ def describe_error(
                 "Verify model availability, prompt schema compliance, and Google GenAI API credentials."
             )
 
-    # 5. Cloud Storage errors
+    # 5. Cloud Storage and Signed URL errors
+    elif "signed_url" in stage_lower or "signblob" in err_msg_lower:
+        category = "GCS Signed URL Generation Failure"
+        description = (
+            "Failed to generate Google Cloud Storage V4 Signed URL. "
+            "Ensure the Cloud Run service account has 'Service Account Token Creator' (roles/iam.serviceAccountTokenCreator) "
+            "role and that IAM Service Account Credentials API is enabled in the project."
+        )
+
     elif "storage" in stage_lower or "gcs" in stage_lower or "notfound" in err_type.lower() or "blob" in stage_lower:
         category = "Cloud Storage Access Failure"
         description = (

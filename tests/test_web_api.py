@@ -431,3 +431,96 @@ def test_api_video_logs_and_failure_diagnostics(client):
     finally:
         orchestrator.firestore_repo = orig_repo
 
+
+def test_api_upload_signed_url_success(client):
+    """Test generating a GCS V4 Signed URL for direct client upload."""
+    mock_storage = MagicMock()
+    mock_storage.upload_json.return_value = "gs://jeffsvideoscan-ingest/signed_vid_config.json"
+    mock_storage.generate_signed_upload_url.return_value = "https://storage.googleapis.com/jeffsvideoscan-ingest/signed_vid.mp4?X-Goog-Signature=test_sig"
+    mock_repo = MagicMock()
+
+    orig_storage = orchestrator.storage_manager
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.storage_manager = mock_storage
+        orchestrator.firestore_repo = mock_repo
+
+        payload = {
+            "video_id": "signed_vid",
+            "filename": "my_camera_roll.mp4",
+            "content_type": "video/mp4",
+            "target_metadata": ["scene_description", "chunk_summary"],
+        }
+        res = client.post("/api/upload/signed-url", json=payload)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["video_id"] == "signed_vid"
+        assert "storage.googleapis.com" in data["signed_url"]
+        assert data["gcs_uri"] == "gs://jeffsvideoscan-ingest/signed_vid.mp4"
+        assert data["video_object"] == "signed_vid.mp4"
+        assert data["config_object"] == "signed_vid_config.json"
+        assert data["target_metadata"] == ["scene_description", "chunk_summary"]
+
+        mock_storage.upload_json.assert_called_once()
+        mock_storage.generate_signed_upload_url.assert_called_once()
+        mock_repo.init_video_record.assert_called_once()
+    finally:
+        orchestrator.storage_manager = orig_storage
+        orchestrator.firestore_repo = orig_repo
+
+
+def test_api_upload_signed_url_invalid_catalog(client):
+    """Test generating signed URL fails gracefully when invalid metadata keys are submitted."""
+    payload = {
+        "video_id": "bad_catalog_vid",
+        "target_metadata": ["unsupported_attribute_xyz"],
+    }
+    res = client.post("/api/upload/signed-url", json=payload)
+    assert res.status_code == 400
+    assert "Configuration validation error" in res.json()["detail"]
+
+
+def test_api_upload_complete_success(client):
+    """Test completing a signed URL upload kicks off the pipeline."""
+    mock_storage = MagicMock()
+    mock_storage.check_blob_exists.return_value = True
+
+    orig_storage = orchestrator.storage_manager
+    try:
+        orchestrator.storage_manager = mock_storage
+
+        payload = {
+            "video_id": "signed_vid",
+            "run_pipeline": False,
+        }
+        res = client.post("/api/upload/complete", json=payload)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "PROCESSING"
+        assert data["video_id"] == "signed_vid"
+        assert "Upload verified in GCS" in data["message"]
+        mock_storage.check_blob_exists.assert_called_with("jeffsvideoscan-ingest", "signed_vid.mp4")
+    finally:
+        orchestrator.storage_manager = orig_storage
+
+
+def test_api_upload_complete_missing_blob(client):
+    """Test complete endpoint returns 404 when file never reached GCS."""
+    mock_storage = MagicMock()
+    mock_storage.check_blob_exists.return_value = False
+
+    orig_storage = orchestrator.storage_manager
+    try:
+        orchestrator.storage_manager = mock_storage
+
+        payload = {
+            "video_id": "missing_vid",
+            "run_pipeline": True,
+        }
+        res = client.post("/api/upload/complete", json=payload)
+        assert res.status_code == 404
+        assert "not found in bucket" in res.json()["detail"]
+    finally:
+        orchestrator.storage_manager = orig_storage
+
+
