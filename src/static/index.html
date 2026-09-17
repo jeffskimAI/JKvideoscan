@@ -272,6 +272,51 @@
         </div>
       </div>
 
+      <!-- Upload Success Banner (Visible when an upload finishes and page resets) -->
+      <div id="uploadSuccessBanner" class="hidden p-4 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 shadow-xl backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
+              <span>Upload Successful & Pipeline Queued!</span>
+              <span id="uploadSuccessVideoIdBadge" class="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"></span>
+            </h4>
+            <p id="uploadSuccessMessage" class="text-xs text-emerald-300/80 mt-0.5">
+              Video uploaded to GCS. Strict 10-second FFmpeg chunking and Gemini 3.8 extraction are running. The upload page is reset and ready for your next file.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 flex-shrink-0">
+          <button 
+            type="button" 
+            id="btnViewUploadedInspector"
+            onclick="viewUploadedInInspector()" 
+            class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 flex items-center space-x-1.5 transition-colors"
+          >
+            <span>Inspect Video</span>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <button 
+            type="button" 
+            onclick="dismissUploadSuccessBanner()" 
+            class="p-1.5 rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-900/40 transition-colors"
+            title="Dismiss notification"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Upload Form Grid -->
       <form id="uploadForm" onsubmit="handleUploadSubmit(event)" class="space-y-8">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -479,7 +524,22 @@
             <p class="text-xs text-slate-400">Files will be paired into Cloud Storage and processed into Firestore collection <span class="font-mono text-slate-300">videos</span>.</p>
           </div>
 
-          <div class="flex items-center space-x-4">
+          <div class="flex items-center space-x-3">
+            <button 
+              type="button" 
+              id="btnResetUploadForm"
+              onclick="resetUploadPage(); dismissUploadSuccessBanner();" 
+              class="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors flex items-center space-x-1.5"
+              title="Reset all fields on this upload form"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                <path d="M3 21v-5h5"></path>
+              </svg>
+              <span>Reset</span>
+            </button>
             <button 
               type="submit" 
               id="btnSubmitUpload"
@@ -1342,6 +1402,7 @@
     }
 
     function setVideoFile(file) {
+      dismissUploadSuccessBanner();
       selectedVideoFile = file;
       document.getElementById('videoDropzoneEmpty').classList.add('hidden');
       document.getElementById('videoSelectedCard').classList.remove('hidden');
@@ -1446,6 +1507,133 @@
     function handleDragLeave(event) {
       event.preventDefault();
       event.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+    }
+
+    let lastUploadedVideoId = null;
+
+    function showUploadSuccessBanner(videoId, gcsUri = null, targetMeta = null) {
+      lastUploadedVideoId = videoId;
+      const banner = document.getElementById('uploadSuccessBanner');
+      const badge = document.getElementById('uploadSuccessVideoIdBadge');
+      const msg = document.getElementById('uploadSuccessMessage');
+      if (badge) badge.textContent = videoId;
+      if (msg) {
+        msg.textContent = `Video "${videoId}" uploaded to Google Cloud Storage. Strict 10-second FFmpeg chunking and Gemini 3.8 extraction are running. The upload form is reset and ready for your next file.`;
+      }
+      if (banner) {
+        banner.classList.remove('hidden');
+        banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function dismissUploadSuccessBanner() {
+      const banner = document.getElementById('uploadSuccessBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function viewUploadedInInspector() {
+      if (lastUploadedVideoId) {
+        openVideoInspector(lastUploadedVideoId, 'PROCESSING');
+      } else {
+        switchTab('inspector');
+      }
+    }
+
+    function resetUploadPage() {
+      // 1. Reset video file state & dropzone
+      selectedVideoFile = null;
+      const videoFileInput = document.getElementById('videoFileInput');
+      if (videoFileInput) videoFileInput.value = '';
+
+      const videoDropzoneEmpty = document.getElementById('videoDropzoneEmpty');
+      if (videoDropzoneEmpty) videoDropzoneEmpty.classList.remove('hidden');
+
+      const videoSelectedCard = document.getElementById('videoSelectedCard');
+      if (videoSelectedCard) videoSelectedCard.classList.add('hidden');
+
+      const videoSizeWarning = document.getElementById('videoSizeWarning');
+      if (videoSizeWarning) {
+        videoSizeWarning.classList.add('hidden');
+        videoSizeWarning.innerHTML = '';
+      }
+
+      const preview = document.getElementById('videoLocalPreview');
+      if (preview) {
+        preview.pause();
+        preview.removeAttribute('src');
+        preview.load();
+      }
+
+      const videoFileName = document.getElementById('videoFileName');
+      if (videoFileName) videoFileName.textContent = '';
+
+      const videoFileSize = document.getElementById('videoFileSize');
+      if (videoFileSize) videoFileSize.textContent = '';
+
+      // 2. Reset Video ID input
+      const idInput = document.getElementById('videoIdInput');
+      if (idInput) {
+        idInput.value = '';
+        delete idInput.dataset.autofilled;
+      }
+
+      // 3. Reset Config File state & dropzone
+      selectedConfigFile = null;
+      const configFileInput = document.getElementById('configFileInput');
+      if (configFileInput) configFileInput.value = '';
+
+      const configDropzoneEmpty = document.getElementById('configDropzoneEmpty');
+      if (configDropzoneEmpty) configDropzoneEmpty.classList.remove('hidden');
+
+      const configSelectedCard = document.getElementById('configSelectedCard');
+      if (configSelectedCard) configSelectedCard.classList.add('hidden');
+
+      const configValidationAlert = document.getElementById('configValidationAlert');
+      if (configValidationAlert) configValidationAlert.classList.add('hidden');
+
+      // 4. Reset config mode back to Interactive Builder with default 4 attributes
+      setConfigMode('builder');
+      selectedMetadataKeys = new Set([
+        'chunk_summary',
+        'scene_description',
+        'detected_objects',
+        'overall_sentiment'
+      ]);
+      renderConfigBuilderCheckboxes();
+      updateSelectedCount();
+
+      // 5. Re-enable Submit Button
+      const submitBtn = document.getElementById('btnSubmitUpload');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Upload & Start VideoScan</span>
+        `;
+      }
+
+      // 6. Reset Status Progress Box
+      const statusBox = document.getElementById('uploadStatusBox');
+      if (statusBox) statusBox.classList.add('hidden');
+
+      const progressBar = document.getElementById('uploadProgressBar');
+      if (progressBar) {
+        progressBar.style.width = '0%';
+        progressBar.style.backgroundColor = '';
+      }
+
+      const percentLabel = document.getElementById('uploadPercent');
+      if (percentLabel) percentLabel.textContent = '0%';
+
+      const titleLabel = document.getElementById('uploadStatusTitle');
+      if (titleLabel) titleLabel.textContent = 'Uploading to Google Cloud Storage...';
+
+      const descLabel = document.getElementById('uploadStatusDesc');
+      if (descLabel) descLabel.textContent = 'Transferring video and configuration files.';
     }
 
     // Submit Upload Form (Video + Config -> Backend -> GCS -> Cloud Run)
@@ -1604,22 +1792,25 @@
             progressBar.style.width = '100%';
             percentLabel.textContent = '100%';
             titleLabel.textContent = 'Uploaded Successfully!';
-            descLabel.textContent = 'Direct GCS upload complete. Pipeline processing is running. Redirecting to Metadata Results...';
+            descLabel.textContent = 'Direct GCS upload complete. Pipeline processing is running. Upload page is reset and ready for next file.';
+
+            const finishedVideoId = currentVideoId;
+            const finishedGcsUri = signedData.gcs_uri;
+            const finishedTargetMeta = signedData.target_metadata;
 
             // Clear inspector tab immediately and show PROCESSING to match Firestore library
-            clearInspectorTab(currentVideoId, 'PROCESSING', {
-              gcs_uri: signedData.gcs_uri,
-              target_metadata: signedData.target_metadata
+            clearInspectorTab(finishedVideoId, 'PROCESSING', {
+              gcs_uri: finishedGcsUri,
+              target_metadata: finishedTargetMeta
             });
 
+            // Refresh library count in background so badge updates
+            fetchVideosList();
+
             setTimeout(() => {
-              statusBox.classList.add('hidden');
-              progressBar.style.width = '0%';
-              openVideoInspector(currentVideoId, 'PROCESSING', {
-                gcs_uri: signedData.gcs_uri,
-                target_metadata: signedData.target_metadata
-              });
-            }, 1000);
+              resetUploadPage();
+              showUploadSuccessBanner(finishedVideoId, finishedGcsUri, finishedTargetMeta);
+            }, 600);
           } catch (compErr) {
             submitBtn.disabled = false;
             titleLabel.textContent = 'Pipeline Trigger Failed';
