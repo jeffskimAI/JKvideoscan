@@ -570,4 +570,41 @@ def test_api_stop_all_videos(client):
         orchestrator.firestore_repo = orig_repo
 
 
+def test_api_scan_bucket(client):
+    """Test scanning GCS bucket for video files."""
+    mock_blob_vid = MagicMock()
+    mock_blob_vid.name = "surfer.mp4"
+    mock_blob_vid.size = 1000
+
+    mock_blob_cfg = MagicMock()
+    mock_blob_cfg.name = "surfer_config.json"
+    mock_blob_cfg.size = 100
+
+    mock_storage = MagicMock()
+    mock_storage.list_blobs.return_value = [mock_blob_vid, mock_blob_cfg]
+    mock_storage.download_json_as_dict.return_value = {
+        "target_metadata": ["scene_description", "chunk_summary"]
+    }
+
+    mock_repo = MagicMock()
+
+    orig_storage = orchestrator.storage_manager
+    orig_repo = orchestrator.firestore_repo
+    try:
+        orchestrator.storage_manager = mock_storage
+        orchestrator.firestore_repo = mock_repo
+
+        res = client.post("/api/videos/scan-bucket")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "success"
+        assert data["scanned_count"] == 1
+        assert data["scanned_videos"] == ["surfer"]
+        mock_repo.init_video_record.assert_called_once()
+    finally:
+        orchestrator.storage_manager = orig_storage
+        orchestrator.firestore_repo = orig_repo
+
+
+
 

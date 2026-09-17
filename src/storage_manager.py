@@ -60,6 +60,11 @@ class StorageManager:
         blob = bucket.blob(object_name)
         return blob.exists()
 
+    def list_blobs(self, bucket_name: str, prefix: Optional[str] = None):
+        """Lists blobs in the given GCS bucket."""
+        bucket = self.client.bucket(bucket_name)
+        return list(bucket.list_blobs(prefix=prefix))
+
     def download_blob_to_file(self, bucket_name: str, object_name: str, dest_path: Path) -> Path:
         """Downloads a GCS blob to a local file."""
         dest_path.parent.mkdir(parents=True, exist_ok=True)

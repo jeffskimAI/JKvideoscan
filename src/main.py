@@ -677,6 +677,132 @@ async def trigger_reprocessing(video_id: str, background_tasks: BackgroundTasks)
     return {"status": "TRIGGERED", "video_id": video_id}
 
 
+def _process_video_batch_sequentially(items: List[Dict[str, Any]]):
+    """Processes a list of video pipeline items sequentially to prevent container memory/disk exhaustion."""
+    logger.info(f"Starting sequential batch processing of {len(items)} videos...")
+    for item in items:
+        vid = item["video_id"]
+        try:
+            # Check if this video was cancelled or stopped before starting
+            rec = orchestrator.firestore_repo.get_video_record(vid)
+            if rec and rec.get("status") in ("STOPPED", "CANCELLED"):
+                logger.info(f"Skipping {vid} in batch process: status={rec.get('status')}")
+                continue
+
+            logger.info(f"Batch processing starting for video {vid} ({item.get('size', 0)} bytes)...")
+            orchestrator.execute_video_pipeline(
+                bucket_name=item["bucket_name"],
+                video_id=vid,
+                video_object=item["video_object"],
+                config_object=item["config_object"],
+                force=True,
+            )
+        except Exception as e:
+            logger.error(f"Error processing video {vid} in batch: {e}")
+    logger.info("Sequential batch processing completed.")
+
+
+@app.post("/api/videos/scan-bucket", dependencies=[Depends(require_auth)])
+async def scan_gcs_bucket(background_tasks: BackgroundTasks):
+    """Scans the ingest GCS bucket for existing videos and triggers metadata extraction."""
+    bucket_name = settings.gcs_bucket
+    video_extensions = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+
+    try:
+        blobs = orchestrator.storage_manager.list_blobs(bucket_name)
+    except Exception as e:
+        logger.error(f"Failed to list blobs in gs://{bucket_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list files in Google Cloud Storage bucket {bucket_name}: {e}",
+        )
+
+    blob_names = {b.name for b in blobs}
+    items_to_process = []
+    scanned_videos = []
+
+    for blob in blobs:
+        suffix = Path(blob.name).suffix.lower()
+        if suffix in video_extensions:
+            video_object = blob.name
+            raw_id = Path(video_object).stem
+            video_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", raw_id).strip("_").lower()
+
+            # Find matching config
+            config_candidates = [
+                f"{raw_id}_config.json",
+                f"{video_id}_config.json",
+            ]
+            config_object = None
+            for cand in config_candidates:
+                if cand in blob_names:
+                    config_object = cand
+                    break
+
+            # Read target metadata from config if available
+            target_metadata = [
+                "chunk_summary",
+                "scene_description",
+                "detected_objects",
+                "overall_sentiment",
+            ]
+            if config_object:
+                try:
+                    c_dict = orchestrator.storage_manager.download_json_as_dict(bucket_name, config_object)
+                    target_metadata = parse_config_payload(c_dict)
+                except Exception as e:
+                    logger.warning(f"Could not parse config {config_object}: {e}")
+            else:
+                config_object = f"{video_id}_config.json"
+                try:
+                    orchestrator.storage_manager.upload_json(
+                        bucket_name=bucket_name,
+                        object_name=config_object,
+                        data={"target_metadata": target_metadata},
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not auto-generate config {config_object}: {e}")
+
+            # Initialize Firestore record with status "PROCESSING"
+            try:
+                orchestrator.firestore_repo.init_video_record(
+                    video_id=video_id,
+                    filename=Path(video_object).name,
+                    gcs_bucket=bucket_name,
+                    gcs_path=video_object,
+                    config_path=config_object,
+                    target_metadata=target_metadata,
+                    total_chunks=0,
+                    duration_seconds=0.0,
+                )
+            except Exception as e:
+                logger.warning(f"Could not init firestore record for {video_id}: {e}")
+
+            item = {
+                "bucket_name": bucket_name,
+                "video_id": video_id,
+                "video_object": video_object,
+                "config_object": config_object,
+                "size": getattr(blob, "size", 0) or 0,
+            }
+            items_to_process.append(item)
+            scanned_videos.append(video_id)
+
+    # Sort items by file size so smaller videos process and yield results first
+    items_to_process.sort(key=lambda x: x.get("size", 0))
+
+    if items_to_process:
+        logger.info(f"Triggering batch scan pipeline for {len(items_to_process)} videos: {scanned_videos}")
+        background_tasks.add_task(_process_video_batch_sequentially, items_to_process)
+
+    return {
+        "status": "success",
+        "scanned_count": len(scanned_videos),
+        "scanned_videos": scanned_videos,
+        "message": f"Discovered {len(scanned_videos)} video(s) in gs://{bucket_name}. Background scanning and metadata extraction initiated.",
+    }
+
+
 @app.post("/api/videos/stop-all", dependencies=[Depends(require_auth)])
 async def stop_all_processes():
     """Stops all currently running or queued video processing pipelines."""
