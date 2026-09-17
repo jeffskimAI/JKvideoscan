@@ -30,7 +30,7 @@ def test_gemini_extractor_success(tmp_path: Path):
     })
     mock_client.models.generate_content.return_value = mock_response
 
-    extractor = GeminiExtractor(client=mock_client, model_name="gemini-2.5-flash")
+    extractor = GeminiExtractor(client=mock_client, model_name="gemini-3.8")
     target_keys = ["scene_description", "detected_objects", "overall_sentiment"]
 
     result = extractor.extract_chunk_metadata(chunk, target_keys)

@@ -140,7 +140,7 @@ def test_api_videos_list_and_detail(client):
         video_id="test_vid_1",
         chunk=chunk,
         extracted_metadata={"scene_description": "Office scene", "overall_sentiment": "positive"},
-        model_version="gemini-2.5-flash",
+        model_version="gemini-3.8",
     )
 
     orig_repo = orchestrator.firestore_repo

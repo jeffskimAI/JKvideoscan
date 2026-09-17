@@ -45,8 +45,7 @@ class Settings(BaseSettings):
     firestore_collection: str = Field(default="videos")
 
     # Vertex AI Gemini Configuration
-    # spec.md mentions Vertex AI Gemini 3.8
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-3.8")
 
     # Video Processing Parameters
     chunk_duration_seconds: int = Field(default=10, description="Strict 10-second chunking")

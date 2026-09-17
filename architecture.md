@@ -35,7 +35,7 @@ flowchart TD
     end
 
     subgraph ExternalAI [Google Cloud Vertex AI]
-        GeminiClient -->|"generate_content(video_chunk, schema)"| GeminiModel["Gemini 3.8 Model\n(gemini-2.5-flash / gemini-3.8)"]
+        GeminiClient -->|"generate_content(video_chunk, schema)"| GeminiModel["Gemini 3.8 Model\n(gemini-3.8)"]
         GeminiModel -->|"Structured JSON Response"| GeminiClient
     end
 

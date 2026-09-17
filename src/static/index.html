@@ -699,7 +699,7 @@
               <span>&bull;</span>
               <span class="flex items-center space-x-1">
                 <span class="text-slate-500">Model:</span>
-                <span id="inspectorModel" class="text-indigo-300 font-mono">gemini-2.5-flash</span>
+                <span id="inspectorModel" class="text-indigo-300 font-mono">gemini-3.8</span>
               </span>
             </div>
           </div>
@@ -2098,7 +2098,7 @@
       document.getElementById('inspectorDuration').textContent = (meta.duration_seconds && meta.duration_seconds > 0) ? `${meta.duration_seconds.toFixed(1)}s` : '--';
       document.getElementById('inspectorChunksCount').textContent = meta.total_chunks || '0';
       document.getElementById('inspectorChunksHeaderCount').textContent = status === 'PROCESSING' ? 'Processing...' : `${meta.total_chunks || 0} chunks extracted`;
-      document.getElementById('inspectorModel').textContent = meta.model_version || appInfo.gemini_model || 'gemini-2.5-flash';
+      document.getElementById('inspectorModel').textContent = meta.model_version || appInfo.gemini_model || 'gemini-3.8';
 
       // Target Metadata Tags
       const tagsContainer = document.getElementById('inspectorTargetTags');
@@ -2215,7 +2215,7 @@
         document.getElementById('inspectorDuration').textContent = (v.duration_seconds && v.duration_seconds > 0) ? (v.duration_seconds.toFixed(1) + 's') : '--';
         document.getElementById('inspectorChunksCount').textContent = v.total_chunks || chunks.length;
         document.getElementById('inspectorChunksHeaderCount').textContent = v.status === 'PROCESSING' ? (chunks.length > 0 ? `${chunks.length} chunks extracted (processing...)` : 'Processing...') : `${chunks.length} chunks extracted`;
-        document.getElementById('inspectorModel').textContent = (chunks[0] && chunks[0].model_version) ? chunks[0].model_version : (appInfo.gemini_model || 'gemini-2.5-flash');
+        document.getElementById('inspectorModel').textContent = (chunks[0] && chunks[0].model_version) ? chunks[0].model_version : (appInfo.gemini_model || 'gemini-3.8');
 
         // Status badge: match Firestore library
         const badge = document.getElementById('inspectorStatusBadge');
